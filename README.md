@@ -48,7 +48,7 @@ def handle_function():
 
 ---
 
-### 🌐 4. Update 'requirements.txt'
+### 🌐 4. Update `requirements.txt`
 
 - Add any dependencies your module requires.
 
