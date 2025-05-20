@@ -1,7 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from face_detection import process_video_frames  # Importing face detection logic
+from face_detection.face_detection import process_video_frames  # Importing face detection logic
 import os
 
 
