@@ -7,45 +7,50 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Setup SSH
-      run: |
-        mkdir -p ~/.ssh
-        echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
-        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-    - name: Deploy and run backend
-      env:
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      run: |
-        ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
-          set -e
+      - name: Deploy to EC2
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ENV_FILE_CONTENTS: ${{ secrets.ENV_FILE_CONTENTS }}
+        run: |
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            set -e
+            REPO_DIR="demo-backend"
 
-          # Clone repo if not exists
-          if [ ! -d "demo-backend" ]; then
-            git clone git@github.com:HolboxAI/demo-backend.git
-          fi
+            if [ -d "$REPO_DIR/.git" ]; then
+              echo "Repo exists, pulling latest changes..."
+              cd $REPO_DIR
+              git reset --hard
+              git clean -fd
+              git pull origin main
+            else
+              echo "Cloning repo..."
+              git clone git@github.com:HolboxAI/demo-backend.git
+              cd $REPO_DIR
+            fi
 
-          cd demo-backend
+            # Write .env file from secret
+            echo "$ENV_FILE_CONTENTS" > .env
 
-          # Create/activate venv
-          python3 -m venv venv
-          source venv/bin/activate
+            # Set up and activate virtual environment
+            python3 -m venv venv
+            source venv/bin/activate
+            pip install --upgrade pip
+            pip install -r requirements.txt
 
-          # Install requirements
-          pip install -r requirements.txt
+            # Kill any existing uvicorn processes (optional safety)
+            pkill -f "uvicorn" || true
 
-          # Write .env file
-          echo "OPENAI_API_KEY=${OPENAI_API_KEY}" > .env
-
-          # Kill existing uvicorn if running
-          pkill -f "uvicorn" || true
-
-          # Run app in background
-          nohup bash -c 'source venv/bin/activate && export $(grep -v '^#' .env | xargs) && uvicorn app:app --host 0.0.0.0 --port 8000 --reload' > backend.log 2>&1 &
-        EOF
+            # Run the app with uvicorn
+            nohup uvicorn app:app --host 0.0.0.0 --port 8000 --reload > app.log 2>&1 &
+          EOF
