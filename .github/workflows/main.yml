@@ -21,26 +21,33 @@ jobs:
       - name: Deploy to EC2
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ENV_FILE_CONTENTS: ${{ secrets.ENV_FILE_CONTENTS }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
         run: |
-          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << EOF
             set -e
             REPO_DIR="demo-backend"
 
-            if [ -d "$REPO_DIR/.git" ]; then
+            if [ -d "\$REPO_DIR/.git" ]; then
               echo "Repo exists, pulling latest changes..."
-              cd $REPO_DIR
+              cd \$REPO_DIR
               git reset --hard
               git clean -fd
               git pull origin main
             else
               echo "Cloning repo..."
               git clone git@github.com:HolboxAI/demo-backend.git
-              cd $REPO_DIR
+              cd \$REPO_DIR
             fi
 
-            # Write .env file from secret
-            echo "$ENV_FILE_CONTENTS" > .env
+            # Write .env file with all secrets
+            echo "OPENAI_API_KEY=\$OPENAI_API_KEY" > .env
+            echo "AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID" >> .env
+            echo "AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY" >> .env
+            echo "AWS_DEFAULT_REGION=\$AWS_DEFAULT_REGION" >> .env
+            echo "AWS_ACCOUNT_ID=\$AWS_ACCOUNT_ID" >> .env
 
             # Set up and activate virtual environment
             python3 -m venv venv
