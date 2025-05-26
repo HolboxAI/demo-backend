@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from face_detection.face_detection import process_video_frames  # Importing face detection logic
 import os
-
+from pydantic import BaseModel
 
 import uuid
 from pdf_data_extraction.app.config import TEMP_UPLOAD_DIR
@@ -12,6 +12,12 @@ from pdf_data_extraction.app.embeddings import store_embeddings, query_embedding
 from pdf_data_extraction.app.models import UploadResponse, QuestionRequest, AnswerResponse
 from pdf_data_extraction.app.cleanup import cleanup_task
 import asyncio
+
+# Import your assistant classes
+from ddx.ddx import DDxAssistant
+from pii_redactor.redactor import PiiRedactor
+from pii_extractor.extractor import PiiExtractor
+
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -93,3 +99,35 @@ async def ask_question(req: QuestionRequest):
     answer = generate_answer(req.question, context_texts)
 
     return AnswerResponse(answer=answer, source_chunks=context_texts)
+
+
+
+# Initialize instances of your assistants
+ddx_assistant = DDxAssistant()
+pii_redactor = PiiRedactor()
+pii_extractor = PiiExtractor()
+
+class QuestionRequest(BaseModel):
+    question: str
+
+class PiiRequest(BaseModel):
+    text: str
+
+@app.get("/")
+async def root():
+    return {"message": "Welcome to the FastAPI application!"}
+
+@app.post("/ddx")
+async def ask_ddx(request: QuestionRequest):
+    response = ddx_assistant.ask(request.question)
+    return {"answer": response}
+
+@app.post("/redact")
+async def redact_pii(request: PiiRequest):
+    redacted_text = pii_redactor.redact(request.text)
+    return {"redacted": redacted_text}
+
+@app.post("/extract")
+async def extract_pii(request: PiiRequest):
+    extracted = pii_extractor.extract(request.text)
+    return {"extracted": extracted}
