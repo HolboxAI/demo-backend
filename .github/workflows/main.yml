@@ -27,39 +27,39 @@ jobs:
           AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} 'bash -s' <<'EOF'
-            set -e
-            REPO_DIR="demo-backend"
+          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} bash -s <<EOF
+set -e
+REPO_DIR="demo-backend"
 
-            if [ -d "$REPO_DIR/.git" ]; then
-              echo "Repo exists, pulling latest changes..."
-              cd $REPO_DIR
-              git reset --hard
-              git clean -fd
-              git pull origin main
-            else
-              echo "Cloning repo..."
-              git clone git@github.com:HolboxAI/demo-backend.git
-              cd $REPO_DIR
-            fi
+if [ -d "\$REPO_DIR/.git" ]; then
+  echo "Repo exists, pulling latest changes..."
+  cd \$REPO_DIR
+  git reset --hard
+  git clean -fd
+  git pull origin main
+else
+  echo "Cloning repo..."
+  git clone git@github.com:HolboxAI/demo-backend.git
+  cd \$REPO_DIR
+fi
 
-            echo "Writing .env file..."
-            cat > .env <<EOT
-OPENAI_API_KEY=$OPENAI_API_KEY
-AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
-AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
-AWS_DEFAULT_REGION=$AWS_DEFAULT_REGION
-AWS_ACCOUNT_ID=$AWS_ACCOUNT_ID
+echo "Writing .env file..."
+cat > .env <<EOT
+OPENAI_API_KEY=${OPENAI_API_KEY}
+AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
+AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID}
 EOT
-            chmod 600 .env
+chmod 600 .env
 
-            echo "Setting up virtual environment..."
-            python3 -m venv venv
-            source venv/bin/activate
-            pip install --upgrade pip
-            pip install -r requirements.txt
+echo "Setting up virtual environment..."
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
 
-            echo "Restarting app..."
-            pkill -f "uvicorn" || true
-            nohup uvicorn app:app --host 0.0.0.0 --port 8000 --reload > app.log 2>&1 &
+echo "Restarting app..."
+pkill -f "uvicorn" || true
+nohup uvicorn app:app --host 0.0.0.0 --port 8000 --reload > app.log 2>&1 &
 EOF
