@@ -1,8 +1,8 @@
 import os
 import time
 import asyncio
-from app.config import TEMP_UPLOAD_DIR, PDF_TTL_SECONDS, CLEANUP_INTERVAL_SECONDS
-from app.embeddings import delete_vectors_by_pdf_id
+from .config import TEMP_UPLOAD_DIR, PDF_TTL_SECONDS, CLEANUP_INTERVAL_SECONDS
+from .embeddings import delete_vectors_by_pdf_id
 
 async def cleanup_task():
     while True:
