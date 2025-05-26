@@ -9,3 +9,5 @@ openai
 faiss-cpu
 numpy
 python-dotenv
+newberryai
+pydantic
