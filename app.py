@@ -64,7 +64,7 @@ async def detect_faces_api(video: UploadFile = File(...)):
 async def startup_event():
     asyncio.create_task(cleanup_task())
 
-@app.post("pdf_data_extraction/upload_pdf", response_model=UploadResponse)
+@app.post("/pdf_data_extraction/upload_pdf", response_model=UploadResponse)
 async def upload_pdf(file: UploadFile = File(...)):
     if not file.filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are allowed")
@@ -85,7 +85,7 @@ async def upload_pdf(file: UploadFile = File(...)):
     return UploadResponse(pdf_id=pdf_id, message="PDF uploaded and processed successfully")
 
 
-@app.post("pdf_data_extraction/ask_question", response_model=AnswerResponse)
+@app.post("/pdf_data_extraction/ask_question", response_model=AnswerResponse)
 async def ask_question(req: QuestionRequest):
     if not req.pdf_id:
         raise HTTPException(status_code=400, detail="PDF ID is required")
