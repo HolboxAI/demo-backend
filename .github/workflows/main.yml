@@ -15,12 +15,6 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
       - name: Deploy to EC2
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
-          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
         run: |
           ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << EOF
             set -e
@@ -36,12 +30,6 @@ jobs:
               git clone git@github.com:HolboxAI/demo-backend.git
               cd \$REPO_DIR
             fi
-            # Write .env file with all secrets
-            echo "OPENAI_API_KEY=\$OPENAI_API_KEY" > .env
-            echo "AWS_ACCESS_KEY_ID=\$AWS_ACCESS_KEY_ID" >> .env
-            echo "AWS_SECRET_ACCESS_KEY=\$AWS_SECRET_ACCESS_KEY" >> .env
-            echo "AWS_DEFAULT_REGION=\$AWS_DEFAULT_REGION" >> .env
-            echo "AWS_ACCOUNT_ID=\$AWS_ACCOUNT_ID" >> .env
             # Set up and activate virtual environment
             python3 -m venv venv
             source venv/bin/activate
