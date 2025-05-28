@@ -5,7 +5,7 @@ import tempfile
 import shutil
 
 # AWS Rekognition Client
-rekognition_client = boto3.client("rekognition", region_name="us-east-2")
+rekognition_client = boto3.client("rekognition", region_name="us-east-1")
 
 # Configuration
 FACE_COLLECTION_ID = "face-db-001"
