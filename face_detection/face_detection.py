@@ -8,7 +8,7 @@ import shutil
 rekognition_client = boto3.client("rekognition", region_name="us-east-2")
 
 # Configuration
-FACE_COLLECTION_ID = "face-collection"
+FACE_COLLECTION_ID = "face-db-001"
 
 def process_video_frames(video_path: str, max_frames: int = 20):
     """
