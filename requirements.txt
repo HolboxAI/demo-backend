@@ -12,3 +12,5 @@ python-dotenv
 newberryai
 pydantic
 requests
+pandas
+mysql-connector-python

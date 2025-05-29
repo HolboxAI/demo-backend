@@ -7,7 +7,8 @@ from pydantic import BaseModel
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import asyncio
-
+from nl2sql.nl2sql import ask_nl2sql
+from nl2sql.Routes.api import router as nl2sql_router
 #Healthscribe imports
 from healthscribe.healthscribe import allowed_file, upload_to_s3, fetch_summary, start_transcription, ask_claude
 
@@ -228,3 +229,8 @@ async def start_transcription_route(request: Request):
         return {"summary": transcription_summary}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.post("/nl2sql/ask")
+async def ask_nl2sql_endpoint(request: QuestionRequest):
+    response = ask_nl2sql(request.question)
+    return {"answer": response}
