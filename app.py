@@ -1,22 +1,48 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from face_detection.face_detection import process_video_frames  # Importing face detection logic
 import os
-from pydantic import BaseModel
-
 import uuid
+from pydantic import BaseModel
+from werkzeug.utils import secure_filename
+from datetime import datetime
+import asyncio
+
+# #nl2sql imports
+from nl2sql.nl2sql import ask_nl2sql
+from nl2sql.Routes.api import router as nl2sql_router
+
+# Virtual try-on imports
+from virtual_try_on.virtual_try_on import VirtualTryOnRequest, VirtualTryOnResponse, StatusResponse
+from virtual_try_on.virtual_try_on import get_status
+from virtual_try_on.virtual_try_on import handle_process
+
+## Healthscribe imports
+from healthscribe.healthscribe import allowed_file, upload_to_s3, fetch_summary, start_transcription, ask_claude
+
+# # Face detection imports
+from face_detection.face_detection import process_video_frames
+
+# # PDF data extraction imports
 from pdf_data_extraction.app.config import TEMP_UPLOAD_DIR
 from pdf_data_extraction.app.pdf_utils import extract_text_from_pdf, chunk_text
 from pdf_data_extraction.app.embeddings import store_embeddings, query_embeddings, generate_answer
 from pdf_data_extraction.app.models import UploadResponse, QuestionRequest, AnswerResponse
 from pdf_data_extraction.app.cleanup import cleanup_task
-import asyncio
-
-# Import your assistant classes
 from ddx.ddx import DDxAssistant
 from pii_redactor.redactor import PiiRedactor
 from pii_extractor.extractor import PiiExtractor
+
+# # # Initialize instances of your assistants
+ddx_assistant = DDxAssistant()
+pii_redactor = PiiRedactor()
+pii_extractor = PiiExtractor()
+
+class QuestionRequest(BaseModel):
+    question: str
+
+class PiiRequest(BaseModel):
+    text: str
 
 
 # Initialize FastAPI app
@@ -100,19 +126,6 @@ async def ask_question(req: QuestionRequest):
 
     return AnswerResponse(answer=answer, source_chunks=context_texts)
 
-
-
-# Initialize instances of your assistants
-ddx_assistant = DDxAssistant()
-pii_redactor = PiiRedactor()
-pii_extractor = PiiExtractor()
-
-class QuestionRequest(BaseModel):
-    question: str
-
-class PiiRequest(BaseModel):
-    text: str
-
 @app.get("/")
 async def root():
     return {"message": "Welcome to the FastAPI application!"}
@@ -131,3 +144,129 @@ async def redact_pii(request: PiiRequest):
 async def extract_pii(request: PiiRequest):
     extracted = pii_extractor.extract(request.text)
     return {"extracted": extracted}
+
+# Healthscribe API endpoints
+
+@app.post("/healthscribe/upload-audio")
+async def upload_audio(file: UploadFile = File(...)):
+    try:
+        if not file.filename or not allowed_file(file.filename):
+            raise HTTPException(status_code=400, detail="Invalid file format")
+
+        filename = secure_filename(file.filename)
+        local_path = os.path.join(UPLOAD_FOLDER, filename)
+
+        # Save uploaded file locally
+        with open(local_path, "wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
+
+        # Upload file to S3
+        file_url = upload_to_s3(local_path, filename)
+
+        return {"fileUrl": file_url}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.post("/healthscribe/question-ans")
+async def question_answer(req: QuestionRequest):
+    global transcription_summary
+    if not transcription_summary:
+        raise HTTPException(status_code=400, detail="Transcription summary not available. Complete transcription first.")
+
+    question = req.question
+    if not question:
+        raise HTTPException(status_code=400, detail="No question provided.")
+
+    try:
+        answer = ask_claude(question, transcription_summary)
+        return {"question": question, "answer": answer}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/healthscribe/start-transcription")
+async def start_transcription_route(request: Request):
+    global transcription_summary
+
+    data = await request.json()
+    audio_url = data.get('audioUrl')
+    print("Received Audio URL:", audio_url)
+
+    if not audio_url:
+        raise HTTPException(status_code=400, detail="Audio URL is required.")
+
+    try:
+        BUCKET_NAME = "dax-health-transcribe"
+        S3_PUBLIC_PREFIX = f"https://{BUCKET_NAME}.s3.amazonaws.com/"
+        S3_PRIVATE_PREFIX = f"s3://{BUCKET_NAME}/"
+
+        if audio_url.startswith(S3_PUBLIC_PREFIX):
+            audio_url = S3_PRIVATE_PREFIX + audio_url[len(S3_PUBLIC_PREFIX):]
+            print("Converted to S3 URL:", audio_url)
+
+        PREDEFINED_PREFIX = f"s3://{BUCKET_NAME}/predefined/"
+        if audio_url.startswith(PREDEFINED_PREFIX):
+            print("Predefined audio detected. Fetching existing summary...")
+
+            filename = os.path.basename(audio_url)
+            summary_filename = f"summary_{filename.replace('.mp3', '.json')}"
+            summary_s3_key = f"predefined/{summary_filename}"
+
+            transcription_summary = fetch_summary(f"s3://{BUCKET_NAME}/{summary_s3_key}")
+            return {"summary": transcription_summary}
+
+        # If it's a local file path, upload to S3 first
+        if not audio_url.startswith("s3://"):
+            if os.path.exists(audio_url):
+                filename = os.path.basename(audio_url)
+                audio_url = upload_to_s3(audio_url, filename)
+            else:
+                raise HTTPException(status_code=400, detail="Invalid audio file path.")
+
+        job_name = f"medi_trans_{int(datetime.now().strftime('%Y_%m_%d_%H_%M'))}"
+        print("Starting transcription job:", job_name)
+        medical_scribe_output = start_transcription(job_name, audio_url)
+
+        if "ClinicalDocumentUri" in medical_scribe_output:
+            summary_uri = medical_scribe_output['ClinicalDocumentUri']
+            transcription_summary = fetch_summary(summary_uri)
+        else:
+            transcription_summary = medical_scribe_output.get('ClinicalDocumentText', "No summary found.")
+
+        return {"summary": transcription_summary}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.post("/nl2sql/ask")
+async def ask_nl2sql_endpoint(request: QuestionRequest):
+    response = ask_nl2sql(request.question)
+    return {"answer": response}
+
+
+#Virtual try on backend API endpoints
+@app.post("/virtual-tryon/run", response_model=VirtualTryOnResponse)
+async def virtual_tryon_run(request: VirtualTryOnRequest):
+    """
+    Process virtual try-on request (equivalent to handleProcess in React)
+    """
+    try:
+        
+        result = await handle_process(request)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Virtual try-on processing failed: {str(e)}")
+
+@app.get("/virtual-tryon/status/{job_id}", response_model=StatusResponse)
+async def virtual_tryon_status(job_id: str):
+    """
+    Get the status of a virtual try-on job (equivalent to pollPredictionStatus in React)
+    """
+    try:
+        
+        result = await get_status(job_id)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get job status: {str(e)}")
