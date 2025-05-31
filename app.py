@@ -7,15 +7,23 @@ from pydantic import BaseModel
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import asyncio
+
+# #nl2sql imports
 from nl2sql.nl2sql import ask_nl2sql
 from nl2sql.Routes.api import router as nl2sql_router
-#Healthscribe imports
+
+# Virtual try-on imports
+from virtual_try_on.virtual_try_on import VirtualTryOnRequest, VirtualTryOnResponse, StatusResponse
+from virtual_try_on.virtual_try_on import get_status
+from virtual_try_on.virtual_try_on import handle_process
+
+## Healthscribe imports
 from healthscribe.healthscribe import allowed_file, upload_to_s3, fetch_summary, start_transcription, ask_claude
 
-# Face detection imports
+# # Face detection imports
 from face_detection.face_detection import process_video_frames
 
-# PDF data extraction imports
+# # PDF data extraction imports
 from pdf_data_extraction.app.config import TEMP_UPLOAD_DIR
 from pdf_data_extraction.app.pdf_utils import extract_text_from_pdf, chunk_text
 from pdf_data_extraction.app.embeddings import store_embeddings, query_embeddings, generate_answer
@@ -25,7 +33,7 @@ from ddx.ddx import DDxAssistant
 from pii_redactor.redactor import PiiRedactor
 from pii_extractor.extractor import PiiExtractor
 
-# # Initialize instances of your assistants
+# # # Initialize instances of your assistants
 ddx_assistant = DDxAssistant()
 pii_redactor = PiiRedactor()
 pii_extractor = PiiExtractor()
@@ -234,3 +242,31 @@ async def start_transcription_route(request: Request):
 async def ask_nl2sql_endpoint(request: QuestionRequest):
     response = ask_nl2sql(request.question)
     return {"answer": response}
+
+
+#Virtual try on backend API endpoints
+@app.post("/virtual-tryon/run", response_model=VirtualTryOnResponse)
+async def virtual_tryon_run(request: VirtualTryOnRequest):
+    """
+    Process virtual try-on request (equivalent to handleProcess in React)
+    """
+    try:
+        
+        result = await handle_process(request)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Virtual try-on processing failed: {str(e)}")
+
+@app.get("/virtual-tryon/status/{job_id}", response_model=StatusResponse)
+async def virtual_tryon_status(job_id: str):
+    """
+    Get the status of a virtual try-on job (equivalent to pollPredictionStatus in React)
+    """
+    try:
+        
+        result = await get_status(job_id)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get job status: {str(e)}")
