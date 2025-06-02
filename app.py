@@ -27,7 +27,7 @@ from face_detection.face_detection import process_video_frames
 from pdf_data_extraction.app.config import TEMP_UPLOAD_DIR
 from pdf_data_extraction.app.pdf_utils import extract_text_from_pdf, chunk_text
 from pdf_data_extraction.app.embeddings import store_embeddings, query_embeddings, generate_answer
-from pdf_data_extraction.app.models import UploadResponse, QuestionRequest, AnswerResponse
+from pdf_data_extraction.app.models import UploadResponse, QuestionRequestPDF, AnswerResponse
 from pdf_data_extraction.app.cleanup import cleanup_task
 from ddx.ddx import DDxAssistant
 from pii_redactor.redactor import PiiRedactor
@@ -40,7 +40,7 @@ ddx_assistant = DDxAssistant()
 pii_redactor = PiiRedactor()
 pii_extractor = PiiExtractor()
 
-class QuestionRequestDDX(BaseModel):
+class QuestionRequest(BaseModel):
     question: str
 
 class PiiRequest(BaseModel):
@@ -114,7 +114,7 @@ async def upload_pdf(file: UploadFile = File(...)):
 
 
 @app.post("/pdf_data_extraction/ask_question", response_model=AnswerResponse)
-async def ask_question(req: QuestionRequest):
+async def ask_question(req: QuestionRequestPDF):
     if not req.pdf_id:
         raise HTTPException(status_code=400, detail="PDF ID is required")
     
@@ -133,7 +133,7 @@ async def root():
     return {"message": "Welcome to the FastAPI application!"}
 
 @app.post("/ddx")
-async def ask_ddx(request: QuestionRequestDDX):
+async def ask_ddx(request: QuestionRequest):
     response = ddx_assistant.ask(request.question)
     return {"answer": response}
 
