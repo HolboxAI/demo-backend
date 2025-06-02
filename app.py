@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, WebSocket
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -33,7 +33,9 @@ from ddx.ddx import DDxAssistant
 from pii_redactor.redactor import PiiRedactor
 from pii_extractor.extractor import PiiExtractor
 
-# # # Initialize instances of your assistants
+
+from voice_agent.voice_agent import voice_websocket_endpoint
+# # Initialize instances of your assistants
 ddx_assistant = DDxAssistant()
 pii_redactor = PiiRedactor()
 pii_extractor = PiiExtractor()
@@ -270,3 +272,9 @@ async def virtual_tryon_status(job_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get job status: {str(e)}")
+    
+
+# Voice Agent WebSocket Endpoint
+@app.websocket("/voice_agent/voice")
+async def websocket_route(ws: WebSocket):
+    await voice_websocket_endpoint(ws)
