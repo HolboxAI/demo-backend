@@ -15,4 +15,8 @@ requests
 pandas
 mysql-connector-python
 aiohttp
-werkzeug
+httpx
+webrtcvad
+websockets
+asyncio
+Werkzeug
