@@ -162,7 +162,6 @@ class EnhancedVADProcessor:
 
             # 1) Check RMS energy first. If below threshold, treat as silence:
             rms = self._compute_rms(frame)
-            print(f"RMS: {rms:.2f} (threshold: {self.min_rms})")
             if rms < self.min_rms:
                 # Too quiet → count as silence
                 if self.is_speaking:
@@ -187,8 +186,6 @@ class EnhancedVADProcessor:
             try:
                 is_speech = self.vad.is_speech(frame, self.sample_rate)
             except Exception as e:
-                # If VAD throws any error, skip this frame
-                print(f"VAD error: {e}")
                 is_speech = False
 
             if is_speech:
@@ -275,14 +272,13 @@ async def process_audio(audio_data: bytes) -> str:
         return resp.text
 
     except Exception as e:
-        print(f"Error in process_audio: {str(e)}")
+      
         raise
 
 async def execute_tool_call(function_name, arguments):
     """Execute tool functions and return results"""
     try:
-        print(f"Executing {function_name} with arguments: {arguments}")  # Logging
-        
+
         if function_name == "submit_booking":
             booking_data = {
                 "name": arguments.get("name"),
@@ -291,7 +287,7 @@ async def execute_tool_call(function_name, arguments):
                 "time": arguments.get("time")
             }
             
-            print(f"Submitting booking to endpoint: {booking_data}")  # Logging
+           
             
             async with httpx.AsyncClient() as client:
                 response = await client.post(
@@ -299,19 +295,19 @@ async def execute_tool_call(function_name, arguments):
                     json=booking_data,
                     timeout=10.0
                 )
-                print(f"Booking endpoint response: {response.status_code}")  # Logging
+                
                 
                 if response.status_code == 200:
-                    print(f"Booking confirmed: {response.json()}")  # Logging
+                   
                     return {"status": "success", "message": "Booking confirmed!"}
                 else:
-                    print(f"Booking failed: {response.text}")  # Logging
+                    
                     return {"status": "error", "message": "Failed to submit booking"}
         
         return {"status": "success"}
             
     except Exception as e:
-        print(f"Tool execution error: {str(e)}")  # Logging
+       
         return {"status": "error", "message": str(e)}
 
 # Add this function before generate_response_with_history
@@ -330,7 +326,7 @@ async def generate_fallback_response() -> tuple[bytes, str, list]:
         
         return speech_resp.content, fallback_text, []
     except Exception as e:
-        print(f"Error in fallback response: {str(e)}")
+       
         # Return empty audio, error message, and empty tool messages if even fallback fails
         return b"", "Sorry, I'm having technical difficulties.", []
 
@@ -349,9 +345,9 @@ async def generate_response_with_history(text: str, conversation_history: list, 
 
         # Update stored info
         if stored_info is not None and booking_info:
-            print(f"Updating stored info with new data: {booking_info}")
+            
             stored_info.update(booking_info)
-            print(f"Updated stored info: {stored_info}")
+            
 
         # Generate response
         chat_resp = await async_client.chat.completions.create(
@@ -383,16 +379,16 @@ async def generate_response_with_history(text: str, conversation_history: list, 
             )
             return speech_resp.content, response_text, tool_messages
         except Exception as tts_error:
-            print(f"TTS Error: {tts_error}")
+
             return b"", response_text, tool_messages
 
     except Exception as e:
-        print(f"Error in generate_response: {str(e)}")
+
         return await generate_fallback_response()
 
 async def voice_websocket_endpoint(ws: WebSocket):
     await ws.accept()
-    print("WebSocket connected")
+   
 
     conversation_history = [{"role": "system", "content": SYSTEM_PROMPT}]
     stored_info: dict[str, str] = {}
@@ -420,7 +416,7 @@ async def voice_websocket_endpoint(ws: WebSocket):
                         "content": "I notice there's some background noise. I'll switch to push-to-talk mode to help us communicate more clearly."
                     })
                 except Exception:
-                    print("Error sending noise message, WebSocket might be disconnected.")
+                
                     return
             return 
 
@@ -459,7 +455,7 @@ async def voice_websocket_endpoint(ws: WebSocket):
         except WebSocketDisconnect:
             is_connected = False
         except Exception as e:
-            print(f"[process_response error]: {e}")
+          
             if is_connected:
                 try:
                     await ws.send_json({"type": "error", "content": "Error generating response"})
@@ -488,18 +484,17 @@ async def voice_websocket_endpoint(ws: WebSocket):
                                 await ws.send_json({"type": "chat_response", "content": greeting})
                                 await ws.send_bytes(speech_resp.content)
                         except Exception as e:
-                            print(f"[Initial greeting TTS error]: {e}")
+
                             if is_connected:
                                 await ws.send_json({"type": "error", "content": "Error generating speech"})
 
                         mode = payload.get("mode", "push-to-talk")
-                        print(f"Mode set to: {mode}")
+                  
 
                     elif payload.get("event") == "set_mode":
                         mode = payload.get("mode", "push-to-talk")
                         audio_buffer.clear()
-                        print(f"Mode changed to: {mode}")
-
+       
                     elif payload.get("event") == "end_of_turn" and mode == "push-to-talk":
                         if len(audio_buffer) >= 4096:
                             try:
@@ -514,7 +509,7 @@ async def voice_websocket_endpoint(ws: WebSocket):
                                             "content": "I couldn't hear that clearly. Please speak again."
                                         })
                             except Exception as e:
-                                print(f"[push-to-talk process_audio error]: {e}")
+                            
                                 if is_connected:
                                     await ws.send_json({"type": "error", "content": "Error processing audio"})
                         else:
@@ -532,25 +527,25 @@ async def voice_websocket_endpoint(ws: WebSocket):
                     if mode == "real-time":
                         vad_result = vad_processor.process(chunk)
                         if vad_result:
-                            print("VAD detected speech segment (real-time).")
+
                             try:
                                 transcript = await process_audio(vad_result)
                                 await process_response(transcript)        
                             except Exception as e:
-                                print(f"[real-time process_audio error]: {e}")
+                         
                                 if is_connected:
                                     await ws.send_json({"type": "error", "content": "Error processing audio"})
                     else:
                         audio_buffer.extend(chunk)
 
             except WebSocketDisconnect:
-                print("WebSocket disconnected by client.")
+              
                 is_connected = False
             except Exception as e:
-                print(f"[WebSocket loop error]: {e}")
+               
                 if "disconnect" in str(e).lower():
                     is_connected = False
 
     finally:
         is_connected = False
-        print("WebSocket connection closed cleanly.")
+    
