@@ -40,7 +40,7 @@ ddx_assistant = DDxAssistant()
 pii_redactor = PiiRedactor()
 pii_extractor = PiiExtractor()
 
-class QuestionRequest(BaseModel):
+class QuestionRequestDDX(BaseModel):
     question: str
 
 class PiiRequest(BaseModel):
@@ -133,7 +133,7 @@ async def root():
     return {"message": "Welcome to the FastAPI application!"}
 
 @app.post("/ddx")
-async def ask_ddx(request: QuestionRequest):
+async def ask_ddx(request: QuestionRequestDDX):
     response = ddx_assistant.ask(request.question)
     return {"answer": response}
 

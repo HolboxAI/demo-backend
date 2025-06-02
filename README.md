@@ -13,7 +13,7 @@ If you're developing a new module, follow the steps below to integrate your work
 ### 🔧 1. Add Your Code
 
 - Use your assigned directory (e.g., `dir6/`).
-- Inside your directory, create a single `.py` file (e.g., `dir6.py`) with all your module code.
+- Inside your directory, paste your `.py` files (e.g., `dir6.py`) with all your module code.
 
 ---
 
