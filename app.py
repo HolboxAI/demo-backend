@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, status, Query
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -7,6 +7,14 @@ from pydantic import BaseModel
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import asyncio
+import traceback
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # #nl2sql imports
 from nl2sql.nl2sql import ask_nl2sql
@@ -29,9 +37,19 @@ from pdf_data_extraction.app.pdf_utils import extract_text_from_pdf, chunk_text
 from pdf_data_extraction.app.embeddings import store_embeddings, query_embeddings, generate_answer
 from pdf_data_extraction.app.models import UploadResponse, QuestionRequest, AnswerResponse
 from pdf_data_extraction.app.cleanup import cleanup_task
+
 from ddx.ddx import DDxAssistant
 from pii_redactor.redactor import PiiRedactor
 from pii_extractor.extractor import PiiExtractor
+
+#Text to video imports
+from txt2vid.main import (
+    VideoGenerationRequest,
+    VideoGenerationResponse,
+    generate_video,
+    check_video_generation_status,
+    get_video_url
+)
 
 # # # Initialize instances of your assistants
 ddx_assistant = DDxAssistant()
@@ -60,6 +78,10 @@ app.add_middleware(
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+@app.get("/")
+async def root():
+    return {"message": "Welcome to the FastAPI application!"}
+
 @app.post("/detect_faces")
 async def detect_faces_api(video: UploadFile = File(...)):
     """
@@ -84,11 +106,10 @@ async def detect_faces_api(video: UploadFile = File(...)):
 
     return JSONResponse(content=response)
 
-
-
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(cleanup_task())
+
 
 @app.post("/pdf_data_extraction/upload_pdf", response_model=UploadResponse)
 async def upload_pdf(file: UploadFile = File(...)):
@@ -126,27 +147,26 @@ async def ask_question(req: QuestionRequest):
 
     return AnswerResponse(answer=answer, source_chunks=context_texts)
 
-@app.get("/")
-async def root():
-    return {"message": "Welcome to the FastAPI application!"}
 
 @app.post("/ddx")
 async def ask_ddx(request: QuestionRequest):
     response = ddx_assistant.ask(request.question)
     return {"answer": response}
 
+
 @app.post("/redact")
 async def redact_pii(request: PiiRequest):
     redacted_text = pii_redactor.redact(request.text)
     return {"redacted": redacted_text}
+
 
 @app.post("/extract")
 async def extract_pii(request: PiiRequest):
     extracted = pii_extractor.extract(request.text)
     return {"extracted": extracted}
 
-# Healthscribe API endpoints
 
+# Healthscribe API endpoints
 @app.post("/healthscribe/upload-audio")
 async def upload_audio(file: UploadFile = File(...)):
     try:
@@ -270,3 +290,65 @@ async def virtual_tryon_status(job_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get job status: {str(e)}")
+
+@app.post(
+    "/generate-video",
+    response_model=VideoGenerationResponse
+)
+async def create_video_generation(
+    request: VideoGenerationRequest,
+):
+    """
+    Generate a video from a text prompt using Amazon Nova.
+    """
+    try:
+        result = await generate_video(request)
+        # Generate unique job ID
+        job_id = result["invocationArn"]
+                
+        return VideoGenerationResponse(
+            job_id=job_id,
+            status="processing",
+            message="Video generation started successfully"
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to start video generation: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to start video generation: {str(e)}"
+        )
+
+@app.get(
+    "/video-status",
+    response_model=VideoGenerationResponse
+)
+async def get_video_status(job_id: str = Query(..., description="Full invocation ARN")):
+    """
+    Check the status of a video generation job.
+    """
+    try:
+        status = await check_video_generation_status(job_id)
+        
+        if status["status"] == "Completed":
+            video_url = get_video_url(job_id)
+            return VideoGenerationResponse(
+                job_id=job_id,
+                status="completed",
+                message="Video generation completed successfully",
+                video_url=video_url
+            )
+            
+        return VideoGenerationResponse(
+            job_id=job_id,
+            status=status["status"].lower(),
+            message=f"Video generation {status['status'].lower()}"
+        )
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to get video generation status"
+        )
+    
