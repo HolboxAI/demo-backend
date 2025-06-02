@@ -76,7 +76,19 @@ OPENAI_API_KEY=your_api_key_here
 
 ## WebSocket API
 
-### Endpoint: `/voice_agent/voice`
+### WebSocket Endpoint
+
+The WebSocket server can be accessed at:
+
+`ws://<serverurl>/voice_agent/voice`
+
+Use this endpoint to establish a real-time bidirectional audio stream between the client and the FastAPI backend.
+
+Example connection from the client:
+
+````javascript
+const ws = new WebSocket("ws://localhost:8000/voice_agent/voice");
+````
 
 #### Connection Modes
 
