@@ -256,7 +256,6 @@ async def start_transcription_route(request: Request):
         raise HTTPException(status_code=400, detail="Audio URL is required.")
 
     try:
-        BUCKET_NAME = "dax-healthscribe-v2"
         BUCKET_NAME = os.getenv('BUCKET_NAME')
         S3_PUBLIC_PREFIX = f"https://{BUCKET_NAME}.s3.amazonaws.com/"
         S3_PRIVATE_PREFIX = f"s3://{BUCKET_NAME}/"
