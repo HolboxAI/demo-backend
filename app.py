@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import asyncio
+from dotenv import load_dotenv
 
 # #nl2sql imports
 from nl2sql.nl2sql import ask_nl2sql
@@ -58,6 +59,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+load_dotenv()  # Load environment variables from .env file
 
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -199,7 +202,7 @@ async def start_transcription_route(request: Request):
         raise HTTPException(status_code=400, detail="Audio URL is required.")
 
     try:
-        BUCKET_NAME = "dax-healthscribe-v2"
+        BUCKET_NAME = os.getenv('BUCKET_NAME')
         S3_PUBLIC_PREFIX = f"https://{BUCKET_NAME}.s3.amazonaws.com/"
         S3_PRIVATE_PREFIX = f"s3://{BUCKET_NAME}/"
 
