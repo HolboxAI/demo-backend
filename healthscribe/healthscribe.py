@@ -10,14 +10,13 @@ from werkzeug.utils import secure_filename
 load_dotenv()  # Load environment variables from .env file
 
 # AWS clients
-transcribe_medical = boto3.client('transcribe', region_name=os.getenv('AWS_REGION', 'us-east-1'))
-s3_client = boto3.client('s3', region_name="us-east-1")
-brt = boto3.client("bedrock-runtime", region_name=os.getenv('AWS_REGION', 'us-east-1'))
+transcribe_medical = boto3.client('transcribe', region_name=os.getenv('AWS_DEFAULT_REGION'))
+s3_client = boto3.client('s3', region_name=os.getenv('AWS_DEFAULT_REGION'))
+brt = boto3.client("bedrock-runtime", region_name=os.getenv('AWS_DEFAULT_REGION'))
 
 # Default settings from environment variables
-BUCKET_NAME = os.getenv('BUCKET_NAME', 'default-bucket-name')
-DATA_ACCESS_ROLE_ARN = os.getenv('DATA_ACCESS_ROLE_ARN', 'default-role-arn')
-
+BUCKET_NAME = os.getenv('BUCKET_NAME')
+DATA_ACCESS_ROLE_ARN = os.getenv('DATA_ACCESS_ROLE_ARN')
 # Allowed extensions for audio files
 ALLOWED_EXTENSIONS = {'mp3', 'wav', 'm4a'}
 
