@@ -411,6 +411,16 @@ async def get_video_status(job_id: str = Query(..., description="Full invocation
 async def websocket_route(ws: WebSocket):
     await voice_websocket_endpoint(ws)
 
+
+# Static files for generated images
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+
+IMAGES_DIR = Path(__file__).parent / "generated_images"  # Ensure this path is correct
+
+# Mount the static folder at the right path
+app.mount("/api/demo_backend_v2/images", StaticFiles(directory=IMAGES_DIR), name="generated_images")
+
     
 #Text to Image API endpoints
 @app.post("/api/demo_backend_v2/generate", response_model=ImageGenerationResponse)
