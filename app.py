@@ -34,8 +34,16 @@ from ddx.ddx import DDxAssistant
 from pii_redactor.redactor import PiiRedactor
 from pii_extractor.extractor import PiiExtractor
 
+## summarizer imports
+from summarizer.models import UploadResponse, SummaryRequest, SummaryResponse
+from summarizer.cleanup import cleanup_task_summ
+from summarizer.config import TEMP_UPLOAD_DIR_SUMM
+from summarizer.pdf_utils import extract_text_from_pdf
+from summarizer.openai_utils import generate_summary
+
 
 from voice_agent.voice_agent import voice_websocket_endpoint
+
 # # Initialize instances of your assistants
 ddx_assistant = DDxAssistant()
 pii_redactor = PiiRedactor()
@@ -65,7 +73,7 @@ load_dotenv()  # Load environment variables from .env file
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-@app.post("/detect_faces")
+@app.post("/api/demo_backend_v2/detect_faces")
 async def detect_faces_api(video: UploadFile = File(...)):
     """
     API endpoint to upload a video, process it for face recognition, and return detection results.
@@ -94,8 +102,35 @@ async def detect_faces_api(video: UploadFile = File(...)):
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(cleanup_task())
+    asyncio.create_task(cleanup_task_summ())
 
-@app.post("/pdf_data_extraction/upload_pdf", response_model=UploadResponse)
+@app.post("/api/demo_backend_v2/summarizer/upload_pdf", response_model=UploadResponse)
+async def upload_pdf(file: UploadFile = File(...)):
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+
+    pdf_id = str(uuid.uuid4())
+    save_path = os.path.join(TEMP_UPLOAD_DIR_SUMM, f"{pdf_id}.pdf")
+
+    with open(save_path, "wb") as f:
+        content = await file.read()
+        f.write(content)
+
+    return UploadResponse(pdf_id=pdf_id, message="PDF uploaded successfully")
+
+@app.post("/api/demo_backend_v2/summarizer/get_summary", response_model=SummaryResponse)
+async def get_summary(request: SummaryRequest):
+    pdf_path = os.path.join(TEMP_UPLOAD_DIR_SUMM, f"{request.pdf_id}.pdf")
+    if not os.path.isfile(pdf_path):
+        raise HTTPException(status_code=404, detail="PDF not found or expired")
+
+    text = extract_text_from_pdf(pdf_path)
+    # Optional: if text is huge, consider chunking here (not included for simplicity)
+    summary = generate_summary(text)
+
+    return SummaryResponse(summary=summary)
+
+@app.post("/api/demo_backend_v2/pdf_data_extraction/upload_pdf", response_model=UploadResponse)
 async def upload_pdf(file: UploadFile = File(...)):
     if not file.filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are allowed")
@@ -116,7 +151,7 @@ async def upload_pdf(file: UploadFile = File(...)):
     return UploadResponse(pdf_id=pdf_id, message="PDF uploaded and processed successfully")
 
 
-@app.post("/pdf_data_extraction/ask_question", response_model=AnswerResponse)
+@app.post("/api/demo_backend_v2/pdf_data_extraction/ask_question", response_model=AnswerResponse)
 async def ask_question(req: QuestionRequestPDF):
     if not req.pdf_id:
         raise HTTPException(status_code=400, detail="PDF ID is required")
@@ -131,28 +166,33 @@ async def ask_question(req: QuestionRequestPDF):
 
     return AnswerResponse(answer=answer, source_chunks=context_texts)
 
-@app.get("/")
-async def root():
-    return {"message": "Welcome to the FastAPI application!"}
+# @app.get("/api/demo_backend_v2/")
+# async def root():
+#     return {"message": "Welcome to the FastAPI application!"}
 
-@app.post("/ddx")
+@app.get("/api/demo_backend_v2")
+async def demo():
+    return {"msg": "Hello"}
+
+
+@app.post("/api/demo_backend_v2/ddx")
 async def ask_ddx(request: QuestionRequest):
     response = ddx_assistant.ask(request.question)
     return {"answer": response}
 
-@app.post("/redact")
+@app.post("/api/demo_backend_v2/redact")
 async def redact_pii(request: PiiRequest):
     redacted_text = pii_redactor.redact(request.text)
     return {"redacted": redacted_text}
 
-@app.post("/extract")
+@app.post("/api/demo_backend_v2/extract")
 async def extract_pii(request: PiiRequest):
     extracted = pii_extractor.extract(request.text)
     return {"extracted": extracted}
 
 # Healthscribe API endpoints
 
-@app.post("/healthscribe/upload-audio")
+@app.post("/api/demo_backend_v2/healthscribe/upload-audio")
 async def upload_audio(file: UploadFile = File(...)):
     try:
         if not file.filename or not allowed_file(file.filename):
@@ -174,7 +214,7 @@ async def upload_audio(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
-@app.post("/healthscribe/question-ans")
+@app.post("/api/demo_backend_v2/healthscribe/question-ans")
 async def question_answer(req: QuestionRequest):
     global transcription_summary
     if not transcription_summary:
@@ -190,7 +230,7 @@ async def question_answer(req: QuestionRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/healthscribe/start-transcription")
+@app.post("/api/demo_backend_v2/healthscribe/start-transcription")
 async def start_transcription_route(request: Request):
     global transcription_summary
 
@@ -202,6 +242,7 @@ async def start_transcription_route(request: Request):
         raise HTTPException(status_code=400, detail="Audio URL is required.")
 
     try:
+        BUCKET_NAME = "dax-healthscribe-v2"
         BUCKET_NAME = os.getenv('BUCKET_NAME')
         S3_PUBLIC_PREFIX = f"https://{BUCKET_NAME}.s3.amazonaws.com/"
         S3_PRIVATE_PREFIX = f"s3://{BUCKET_NAME}/"
@@ -243,14 +284,14 @@ async def start_transcription_route(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
-@app.post("/nl2sql/ask")
+@app.post("/api/demo_backend_v2/nl2sql/ask")
 async def ask_nl2sql_endpoint(request: QuestionRequest):
     response = ask_nl2sql(request.question)
     return {"answer": response}
 
 
 #Virtual try on backend API endpoints
-@app.post("/virtual-tryon/run", response_model=VirtualTryOnResponse)
+@app.post("/api/demo_backend_v2/virtual-tryon/run", response_model=VirtualTryOnResponse)
 async def virtual_tryon_run(request: VirtualTryOnRequest):
     """
     Process virtual try-on request (equivalent to handleProcess in React)
@@ -262,7 +303,7 @@ async def virtual_tryon_run(request: VirtualTryOnRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Virtual try-on processing failed: {str(e)}")
 
-@app.get("/virtual-tryon/status/{job_id}", response_model=StatusResponse)
+@app.get("/api/demo_backend_v2/virtual-tryon/status/{job_id}", response_model=StatusResponse)
 async def virtual_tryon_status(job_id: str):
     """
     Get the status of a virtual try-on job (equivalent to pollPredictionStatus in React)
@@ -278,6 +319,7 @@ async def virtual_tryon_status(job_id: str):
     
 
 # Voice Agent WebSocket Endpoint
-@app.websocket("/voice_agent/voice")
+@app.websocket("/api/demo_backend_v2/voice_agent/voice")
 async def websocket_route(ws: WebSocket):
     await voice_websocket_endpoint(ws)
+
