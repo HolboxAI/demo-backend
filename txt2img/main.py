@@ -99,7 +99,7 @@ async def generate_image(request: ImageGenerationRequest) -> Dict:
                 with open(filepath, "wb") as f:
                     f.write(image_bytes)
                 
-                image_urls.append(f"http://localhost:8001/images/{filename}")
+                image_urls.append(f"http://localhost:8000/api/demo_backend_v2/images/{filename}")
                 logger.info(f"Image saved successfully: {filename}")
 
             except Exception as e:

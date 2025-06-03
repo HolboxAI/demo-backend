@@ -54,7 +54,7 @@ Generates an image from a text prompt.
 
 Generate an image:
 ```bash
-curl -X POST "http://localhost:8001/generate" \
+curl -X POST "http://localhost:8000/api/demo_backend_v2/generate" \
   -H "Content-Type: application/json" \
   -d '{
     "text": "A beautiful sunset over the ocean",
