@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request, status, Query
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, WebSocket, status, Query
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -35,7 +35,7 @@ from face_detection.face_detection import process_video_frames
 from pdf_data_extraction.app.config import TEMP_UPLOAD_DIR
 from pdf_data_extraction.app.pdf_utils import extract_text_from_pdf, chunk_text
 from pdf_data_extraction.app.embeddings import store_embeddings, query_embeddings, generate_answer
-from pdf_data_extraction.app.models import UploadResponse, QuestionRequest, AnswerResponse
+from pdf_data_extraction.app.models import UploadResponse, QuestionRequestPDF, AnswerResponse
 from pdf_data_extraction.app.cleanup import cleanup_task
 
 from ddx.ddx import DDxAssistant
@@ -51,7 +51,9 @@ from txt2vid.main import (
     get_video_url
 )
 
-# # # Initialize instances of your assistants
+
+from voice_agent.voice_agent import voice_websocket_endpoint
+# # Initialize instances of your assistants
 ddx_assistant = DDxAssistant()
 pii_redactor = PiiRedactor()
 pii_extractor = PiiExtractor()
@@ -133,7 +135,7 @@ async def upload_pdf(file: UploadFile = File(...)):
 
 
 @app.post("/pdf_data_extraction/ask_question", response_model=AnswerResponse)
-async def ask_question(req: QuestionRequest):
+async def ask_question(req: QuestionRequestPDF):
     if not req.pdf_id:
         raise HTTPException(status_code=400, detail="PDF ID is required")
     
@@ -352,3 +354,10 @@ async def get_video_status(job_id: str = Query(..., description="Full invocation
             detail="Failed to get video generation status"
         )
     
+
+    
+
+# Voice Agent WebSocket Endpoint
+@app.websocket("/voice_agent/voice")
+async def websocket_route(ws: WebSocket):
+    await voice_websocket_endpoint(ws)

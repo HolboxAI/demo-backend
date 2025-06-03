@@ -4,7 +4,7 @@ class UploadResponse(BaseModel):
     pdf_id: str
     message: str
 
-class QuestionRequest(BaseModel):
+class QuestionRequestPDF(BaseModel):
     pdf_id: str
     question: str
 
