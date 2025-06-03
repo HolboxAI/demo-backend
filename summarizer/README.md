@@ -28,7 +28,7 @@ When a PDF is uploaded successfully:
 }
 
 
-When a summary is requested:
+When a summary is requested
 
 ```json
 {
