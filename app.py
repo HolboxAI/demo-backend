@@ -7,6 +7,8 @@ from pydantic import BaseModel
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import asyncio
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
 import traceback
 import logging
 
@@ -17,7 +19,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 from dotenv import load_dotenv
 
-# #nl2sql imports
+#nl2sql imports
 from nl2sql.nl2sql import ask_nl2sql
 from nl2sql.Routes.api import router as nl2sql_router
 
@@ -43,6 +45,9 @@ from ddx.ddx import DDxAssistant
 from pii_redactor.redactor import PiiRedactor
 from pii_extractor.extractor import PiiExtractor
 
+ #Text to Image imports
+from txt2img.main import ImageGenerationRequest, ImageGenerationResponse, generate_image
+
 #Text to video imports
 from txt2vid.main import (
     VideoGenerationRequest,
@@ -58,13 +63,14 @@ from summarizer.config import TEMP_UPLOAD_DIR_SUMM
 from summarizer.pdf_utils import extract_text_from_pdf
 from summarizer.openai_utils import generate_summary
 
-
+## Voice agent imports
 from voice_agent.voice_agent import voice_websocket_endpoint
 
 # # Initialize instances of your assistants
 ddx_assistant = DDxAssistant()
 pii_redactor = PiiRedactor()
 pii_extractor = PiiExtractor()
+
 
 class QuestionRequest(BaseModel):
     question: str
@@ -84,6 +90,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Create images directory if it doesn't exist
+IMAGES_DIR = Path("generated_images")
+IMAGES_DIR.mkdir(exist_ok=True)
+app.mount("/images", StaticFiles(directory=str(IMAGES_DIR)), name="images")
+
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -399,3 +411,14 @@ async def get_video_status(job_id: str = Query(..., description="Full invocation
 async def websocket_route(ws: WebSocket):
     await voice_websocket_endpoint(ws)
 
+    
+#Text to Image API endpoints
+@app.post("/api/demo_backend_v2/generate", response_model=ImageGenerationResponse)
+async def generate_image_endpoint(request: ImageGenerationRequest):
+    """Endpoint for generating images from text"""
+    return await generate_image(request)
+
+@app.get("/api/demo_backend_v2/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy"}
