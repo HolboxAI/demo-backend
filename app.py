@@ -128,7 +128,7 @@ async def detect_faces_api(video: UploadFile = File(...)):
 
     return JSONResponse(content=response)
 
-@app.post("/add_face")
+@app.post("/api/demo_backend_v2/add_face")
 async def add_face_api(image: UploadFile = File(...), name: str = Form(...)):
     """
     API endpoint to add a face to the collection.
@@ -144,7 +144,7 @@ async def add_face_api(image: UploadFile = File(...), name: str = Form(...)):
     # Clean up the temporary file
     os.remove(file_path)
     return result
-@app.post("/recognize_face")
+@app.post("/api/demo_backend_v2/recognize_face")
 async def recognize_face_api(image: UploadFile = File(...)):
     """
     API endpoint to recognize a face from the collection.
