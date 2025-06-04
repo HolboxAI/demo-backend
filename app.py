@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request, WebSocket, status, Query
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, WebSocket, status, Query, Form
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -33,7 +33,8 @@ from healthscribe.healthscribe import allowed_file, upload_to_s3, fetch_summary,
 
 # # Face detection imports
 from face_detection.face_detection import process_video_frames
-
+# Face recognigation imports
+from face_recognigation.face_recognigation import add_face_to_collection, recognize_face
 # # PDF data extraction imports
 from pdf_data_extraction.app.config import TEMP_UPLOAD_DIR
 from pdf_data_extraction.app.pdf_utils import extract_text_from_pdf, chunk_text
@@ -126,6 +127,39 @@ async def detect_faces_api(video: UploadFile = File(...)):
     }
 
     return JSONResponse(content=response)
+
+@app.post("/api/demo_backend_v2/add_face")
+async def add_face_api(image: UploadFile = File(...), name: str = Form(...)):
+    """
+    API endpoint to add a face to the collection.
+    """
+    if not image.filename:
+        raise HTTPException(status_code=400, detail="Invalid file name.")
+    # Save uploaded image to a file
+    file_path = os.path.join(UPLOAD_FOLDER, image.filename)
+    with open(file_path, "wb") as f:
+        f.write(await image.read())
+    # Add face to collection
+    result = add_face_to_collection(file_path, name)
+    # Clean up the temporary file
+    os.remove(file_path)
+    return result
+@app.post("/api/demo_backend_v2/recognize_face")
+async def recognize_face_api(image: UploadFile = File(...)):
+    """
+    API endpoint to recognize a face from the collection.
+    """
+    if not image.filename:
+        raise HTTPException(status_code=400, detail="Invalid file name.")
+    # Save uploaded image to a file
+    file_path = os.path.join(UPLOAD_FOLDER, image.filename)
+    with open(file_path, "wb") as f:
+        f.write(await image.read())
+    # Recognize face
+    result = recognize_face(file_path)
+    # Clean up the temporary file
+    os.remove(file_path)
+    return result
 
 @app.on_event("startup")
 async def startup_event():
