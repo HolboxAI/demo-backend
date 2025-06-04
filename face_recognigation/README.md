@@ -94,7 +94,7 @@ Adds a face to the AWS Rekognition collection.
 #### Example Request
 ```bash
 curl -X 'POST' \
-  'http://localhost:5002/add_face' \
+  'http://localhost:8000/add_face' \
   -H 'accept: application/json' \
   -H 'Content-Type: multipart/form-data' \
   -F 'image=@path_to_image/image.jpg' \
@@ -112,7 +112,7 @@ Recognizes a face by comparing it with faces in the collection.
 #### Example Request
 ```bash
 curl -X 'POST' \
-  'http://localhost:5002/recognize_face' \
+  'http://localhost:8000/recognize_face' \
   -H 'accept: application/json' \
   -H 'Content-Type: multipart/form-data' \
   -F 'image=@path_to_image/image.jpg'
