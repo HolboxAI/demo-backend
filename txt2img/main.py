@@ -48,6 +48,7 @@ class ImageGenerationResponse(BaseModel):
 async def generate_image(request: ImageGenerationRequest) -> Dict:
     """Generate image using Amazon Titan Image Generator v2"""
     try:
+        BACKCEND_URL = os.getenv("BACKEND_URL", "https://demo.holbox.ai/api/demo_backend_v2");
         # Prepare the request payload
         model_input = {
             "textToImageParams": {
@@ -99,7 +100,7 @@ async def generate_image(request: ImageGenerationRequest) -> Dict:
                 with open(filepath, "wb") as f:
                     f.write(image_bytes)
                 
-                image_urls.append(f"http://localhost:8000/api/demo_backend_v2/images/{filename}")
+                image_urls.append(f"{BACKCEND_URL}/images/{filename}")
                 logger.info(f"Image saved successfully: {filename}")
 
             except Exception as e:
