@@ -289,20 +289,34 @@ async def question_answer(req: QuestionRequest):
         return {"question": question, "answer": answer}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+
 
 @app.post("/api/demo_backend_v2/healthscribe/start-transcription")
 async def start_transcription_route(request: Request):
     global transcription_summary
-
+    BUCKET_NAME = os.getenv('BUCKET_NAME')
     data = await request.json()
     audio_url = data.get('audioUrl')
     print("Received Audio URL:", audio_url)
 
     if not audio_url:
         raise HTTPException(status_code=400, detail="Audio URL is required.")
+    
+    # Check if the audio is from the predefinedAudios folder
+    if "predefinedAudios/" in audio_url:
+        try:
+            # Extract filename (e.g., predefinedAudios1.mp3 → predefinedAudios1)
+            filename = os.path.basename(audio_url).rsplit('.', 1)[0]
+            # Construct the expected S3 URI for summary.json
+            summary_s3_uri = f"s3://{BUCKET_NAME}/predefinedAudios/{filename}_summary.json"
+            print(f"Returning predefined summary URI: {summary_s3_uri}")
+            return {"TranscriptFileUri": summary_s3_uri}
+        except Exception as e:
+            raise Exception(f"Error constructing predefined summary URI: {e}")
 
     try:
-        BUCKET_NAME = os.getenv('BUCKET_NAME')
+
         S3_PUBLIC_PREFIX = f"https://{BUCKET_NAME}.s3.amazonaws.com/"
         S3_PRIVATE_PREFIX = f"s3://{BUCKET_NAME}/"
 
@@ -342,6 +356,59 @@ async def start_transcription_route(request: Request):
         return {"summary": transcription_summary}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# @app.post("/api/demo_backend_v2/healthscribe/start-transcription")
+# async def start_transcription_route(request: Request):
+#     global transcription_summary
+
+#     data = await request.json()
+#     audio_url = data.get('audioUrl')
+#     print("Received Audio URL:", audio_url)
+
+#     if not audio_url:
+#         raise HTTPException(status_code=400, detail="Audio URL is required.")
+
+#     try:
+#         BUCKET_NAME = os.getenv('BUCKET_NAME')
+#         S3_PUBLIC_PREFIX = f"https://{BUCKET_NAME}.s3.amazonaws.com/"
+#         S3_PRIVATE_PREFIX = f"s3://{BUCKET_NAME}/"
+
+#         if audio_url.startswith(S3_PUBLIC_PREFIX):
+#             audio_url = S3_PRIVATE_PREFIX + audio_url[len(S3_PUBLIC_PREFIX):]
+#             print("Converted to S3 URL:", audio_url)
+
+#         PREDEFINED_PREFIX = f"s3://{BUCKET_NAME}/predefined/"
+#         if audio_url.startswith(PREDEFINED_PREFIX):
+#             print("Predefined audio detected. Fetching existing summary...")
+
+#             filename = os.path.basename(audio_url)
+#             summary_filename = f"summary_{filename.replace('.mp3', '.json')}"
+#             summary_s3_key = f"predefined/{summary_filename}"
+
+#             transcription_summary = fetch_summary(f"s3://{BUCKET_NAME}/{summary_s3_key}")
+#             return {"summary": transcription_summary}
+
+#         # If it's a local file path, upload to S3 first
+#         if not audio_url.startswith("s3://"):
+#             if os.path.exists(audio_url):
+#                 filename = os.path.basename(audio_url)
+#                 audio_url = upload_to_s3(audio_url, filename)
+#             else:
+#                 raise HTTPException(status_code=400, detail="Invalid audio file path.")
+
+#         job_name = f"medi_trans_{int(datetime.now().strftime('%Y_%m_%d_%H_%M'))}"
+#         print("Starting transcription job:", job_name)
+#         medical_scribe_output = start_transcription(job_name, audio_url)
+
+#         if "ClinicalDocumentUri" in medical_scribe_output:
+#             summary_uri = medical_scribe_output['ClinicalDocumentUri']
+#             transcription_summary = fetch_summary(summary_uri)
+#         else:
+#             transcription_summary = medical_scribe_output.get('ClinicalDocumentText', "No summary found.")
+
+#         return {"summary": transcription_summary}
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
     
 @app.post("/api/demo_backend_v2/nl2sql/ask")
 async def ask_nl2sql_endpoint(request: QuestionRequest):
@@ -377,7 +444,7 @@ async def virtual_tryon_status(job_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to get job status: {str(e)}")
 
 @app.post(
-    "/generate-video",
+    "/api/demo_backend_v2/generate-video",
     response_model=VideoGenerationResponse
 )
 async def create_video_generation(
@@ -406,7 +473,7 @@ async def create_video_generation(
         )
 
 @app.get(
-    "/video-status",
+    "/api/demo_backend_v2/video-status",
     response_model=VideoGenerationResponse
 )
 async def get_video_status(job_id: str = Query(..., description="Full invocation ARN")):
