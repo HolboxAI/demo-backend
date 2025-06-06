@@ -311,7 +311,9 @@ async def start_transcription_route(request: Request):
             # Construct the expected S3 URI for summary.json
             summary_s3_uri = f"s3://{BUCKET_NAME}/predefinedAudios/{filename}_summary.json"
             print(f"Returning predefined summary URI: {summary_s3_uri}")
-            return {"TranscriptFileUri": summary_s3_uri}
+            # return {"TranscriptFileUri": summary_s3_uri}
+            transcription_summary = fetch_summary(summary_s3_uri)
+            return {"summary": transcription_summary}
         except Exception as e:
             raise Exception(f"Error constructing predefined summary URI: {e}")
 
