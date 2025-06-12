@@ -309,7 +309,7 @@ async def start_transcription_route(request: Request):
             # Extract filename (e.g., predefinedAudios1.mp3 → predefinedAudios1)
             filename = os.path.basename(audio_url).rsplit('.', 1)[0]
             # Construct the expected S3 URI for summary.json
-            summary_s3_uri = f"s3://{BUCKET_NAME}/predefinedAudios/{filename}_summary.json"
+            summary_s3_uri = f"s3://{BUCKET_NAME}/health_scribe/predefinedAudios/{filename}_summary.json"
             print(f"Returning predefined summary URI: {summary_s3_uri}")
             # return {"TranscriptFileUri": summary_s3_uri}
             transcription_summary = fetch_summary(summary_s3_uri)
@@ -332,7 +332,7 @@ async def start_transcription_route(request: Request):
 
             filename = os.path.basename(audio_url)
             summary_filename = f"summary_{filename.replace('.mp3', '.json')}"
-            summary_s3_key = f"predefined/{summary_filename}"
+            summary_s3_key = f"predefinedAudios/{summary_filename}"
 
             transcription_summary = fetch_summary(f"s3://{BUCKET_NAME}/{summary_s3_key}")
             return {"summary": transcription_summary}
