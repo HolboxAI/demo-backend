@@ -31,7 +31,7 @@ def allowed_file(filename):
 def upload_to_s3(file_path, filename):
     """Uploads a local audio file to S3 and returns its S3 URL"""
     try:
-        s3_key = f"uploads/{filename}"
+        s3_key = f"health_scribe/uploads/{filename}"
         s3_client.upload_file(file_path, BUCKET_NAME, s3_key)
         file_url = f"s3://{BUCKET_NAME}/{s3_key}"
         print(f"DEBUG: File uploaded to S3: {file_url}")
