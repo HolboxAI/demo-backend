@@ -20,3 +20,6 @@ webrtcvad
 websockets
 asyncio
 Werkzeug
+sqlalchemy
+pillow
+psycopg2
