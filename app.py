@@ -11,6 +11,8 @@ from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 import traceback
 import logging
+import base64
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -501,17 +503,34 @@ async def ask_nl2sql_endpoint(request: QuestionRequest):
 
 
 #Virtual try on backend API endpoints
-@app.post("/api/demo_backend_v2/virtual-tryon/run", response_model=VirtualTryOnResponse)
-async def virtual_tryon_run(request: VirtualTryOnRequest):
-    """
-    Process virtual try-on request (equivalent to handleProcess in React)
-    """
-    try:
+# @app.post("/api/demo_backend_v2/virtual-tryon/run", response_model=VirtualTryOnResponse)
+# async def virtual_tryon_run(request: VirtualTryOnRequest):
+#     """
+#     Process virtual try-on request (equivalent to handleProcess in React)
+#     """
+#     try:
         
-        result = await handle_process(request)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Virtual try-on processing failed: {str(e)}")
+#         result = await handle_process(request)
+#         return result
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Virtual try-on processing failed: {str(e)}")
+
+@app.post("/api/demo_backend_v2/virtual-tryon/run")
+async def virtual_tryon_run(
+    model_image: UploadFile = File(...),
+    garment_image: UploadFile = File(...)
+):
+    # Read file content and convert to base64
+    model_image_b64 = base64.b64encode(await model_image.read()).decode()
+    garment_image_b64 = base64.b64encode(await garment_image.read()).decode()
+    # Always set category to 'tops'
+    request = VirtualTryOnRequest(
+        model_image=model_image_b64,
+        garment_image=garment_image_b64,
+        category="tops"
+    )
+    result = await handle_process(request)
+    return result
 
 @app.get("/api/demo_backend_v2/virtual-tryon/status/{job_id}", response_model=StatusResponse)
 async def virtual_tryon_status(job_id: str):
@@ -519,13 +538,13 @@ async def virtual_tryon_status(job_id: str):
     Get the status of a virtual try-on job (equivalent to pollPredictionStatus in React)
     """
     try:
-        
         result = await get_status(job_id)
         return result
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get job status: {str(e)}")
+
 
 @app.post(
     "/api/demo_backend_v2/generate-video",
