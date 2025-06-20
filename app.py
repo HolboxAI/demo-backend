@@ -44,11 +44,11 @@ from sqlalchemy.orm import Session, sessionmaker
 
 
 # # PDF data extraction imports
-from pdf_data_extraction.app.config import TEMP_UPLOAD_DIR
-from pdf_data_extraction.app.pdf_utils import extract_text_from_pdf, chunk_text
-from pdf_data_extraction.app.embeddings import store_embeddings, query_embeddings, generate_answer
-from pdf_data_extraction.app.models import UploadResponse, QuestionRequestPDF, AnswerResponse
-from pdf_data_extraction.app.cleanup import cleanup_task
+# from pdf_data_extraction.app.config import TEMP_UPLOAD_DIR
+# from pdf_data_extraction.app.pdf_utils import extract_text_from_pdf, chunk_text
+# from pdf_data_extraction.app.embeddings import store_embeddings, query_embeddings, generate_answer
+# from pdf_data_extraction.app.models import UploadResponse, QuestionRequestPDF, AnswerResponse
+# from pdf_data_extraction.app.cleanup import cleanup_task
 
 from ddx.ddx import DDxAssistant
 from pii_redactor.redactor import PiiRedactor
@@ -277,45 +277,45 @@ async def get_summary(request: SummaryRequest):
 
     return SummaryResponse(summary=summary)
 
-@app.post("/api/demo_backend_v2/pdf_data_extraction/upload_pdf", response_model=UploadResponse)
-async def upload_pdf(file: UploadFile = File(...)):
-    if not file.filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
-    pdf_id = f"{uuid.uuid4()}.pdf"
-    pdf_path = os.path.join(TEMP_UPLOAD_DIR, pdf_id)
+# @app.post("/api/demo_backend_v2/pdf_data_extraction/upload_pdf", response_model=UploadResponse)
+# async def upload_pdf(file: UploadFile = File(...)):
+#     if not file.filename.endswith(".pdf"):
+#         raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+#     pdf_id = f"{uuid.uuid4()}.pdf"
+#     pdf_path = os.path.join(TEMP_UPLOAD_DIR, pdf_id)
 
-    with open(pdf_path, "wb") as f:
-        content = await file.read()
-        f.write(content)
+#     with open(pdf_path, "wb") as f:
+#         content = await file.read()
+#         f.write(content)
 
-    # Extract text & chunk
-    pages = extract_text_from_pdf(pdf_path)
-    chunks = chunk_text(pages)
+#     # Extract text & chunk
+#     pages = extract_text_from_pdf(pdf_path)
+#     chunks = chunk_text(pages)
 
-    # Store embeddings in vector DB
-    store_embeddings(pdf_id, chunks)
+#     # Store embeddings in vector DB
+#     store_embeddings(pdf_id, chunks)
 
-    return UploadResponse(pdf_id=pdf_id, message="PDF uploaded and processed successfully")
+#     return UploadResponse(pdf_id=pdf_id, message="PDF uploaded and processed successfully")
 
 
-@app.post("/api/demo_backend_v2/pdf_data_extraction/ask_question", response_model=AnswerResponse)
-async def ask_question(req: QuestionRequestPDF):
-    if not req.pdf_id:
-        raise HTTPException(status_code=400, detail="PDF ID is required")
+# @app.post("/api/demo_backend_v2/pdf_data_extraction/ask_question", response_model=AnswerResponse)
+# async def ask_question(req: QuestionRequestPDF):
+#     if not req.pdf_id:
+#         raise HTTPException(status_code=400, detail="PDF ID is required")
     
-    retrieved_chunks = query_embeddings(req.pdf_id, req.question, top_k=3)
-    if not retrieved_chunks:
-        return AnswerResponse(answer="No relevant information found.", source_chunks=[])
+#     retrieved_chunks = query_embeddings(req.pdf_id, req.question, top_k=3)
+#     if not retrieved_chunks:
+#         return AnswerResponse(answer="No relevant information found.", source_chunks=[])
 
-    context_texts = [chunk["text"] for chunk in retrieved_chunks]
+#     context_texts = [chunk["text"] for chunk in retrieved_chunks]
 
-    answer = generate_answer(req.question, context_texts)
+#     answer = generate_answer(req.question, context_texts)
 
-    return AnswerResponse(answer=answer, source_chunks=context_texts)
+#     return AnswerResponse(answer=answer, source_chunks=context_texts)
 
-@app.get("/api/demo_backend_v2/")
-async def root():
-    return {"message": "Welcome to the FastAPI application!"}
+# @app.get("/api/demo_backend_v2/")
+# async def root():
+#     return {"message": "Welcome to the FastAPI application!"}
 
 
 @app.post("/api/demo_backend_v2/ddx")
@@ -498,8 +498,13 @@ async def start_transcription_route(request: Request):
     
 @app.post("/api/demo_backend_v2/nl2sql/ask")
 async def ask_nl2sql_endpoint(request: QuestionRequest):
-    response = ask_nl2sql(request.question)
-    return {"answer": response}
+    try:
+        response = ask_nl2sql(request.question)
+        return {"answer": response}
+    except Exception as e:
+        logger.error(f"Error in nl2sql endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error processing NL2SQL request.")
+
 
 
 #Virtual try on backend API endpoints
@@ -613,7 +618,19 @@ async def get_video_status(job_id: str = Query(..., description="Full invocation
 # Voice Agent WebSocket Endpoint
 @app.websocket("/api/demo_backend_v2/voice_agent/voice")
 async def websocket_route(ws: WebSocket):
-    await voice_websocket_endpoint(ws)
+    print("WebSocket connection opened")
+    await ws.accept()
+    try:
+        while True:
+            data = await ws.receive_text()
+            print("Received data:", data)
+            await ws.send_text(f"Message received: {data}")
+    except Exception as e:
+        print(f"Error during WebSocket communication: {e}")
+    finally:
+        print("WebSocket connection closed")
+        await ws.close()
+
 
 
 # Static files for generated images
