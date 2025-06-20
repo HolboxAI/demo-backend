@@ -47,7 +47,7 @@ def add_face_to_collection(image_path: str, external_image_id: str):
         
         return {
             "message": "Face added successfully",
-            "face_id": response['FaceRecords'][0]['Face']['FaceId'],
+            "face_id": response['FaceRecords'][0]['Face']['FaceId'],  # Return FaceId
             "external_image_id": external_image_id
         }
     
@@ -62,7 +62,7 @@ def recognize_face(image_path: str):
         image_path: Path to the image file
     
     Returns:
-        dict: Response containing the recognized face details
+        dict: Response containing the recognized face details including face_id
     """
     try:
         # Read and validate image using OpenCV
@@ -93,9 +93,12 @@ def recognize_face(image_path: str):
         
         # Get the best match
         best_match = response['FaceMatches'][0]
+        
+        # Return the face_id and name for further matching
         return {
             "message": "Face recognized",
             "recognized": True,
+            "face_id": best_match['Face']['FaceId'],  # Include face_id in the response
             "name": best_match['Face']['ExternalImageId'],
             "confidence": best_match['Similarity']
         }

@@ -35,6 +35,12 @@ from healthscribe.healthscribe import allowed_file, upload_to_s3, fetch_summary,
 from face_detection.face_detection import process_video_frames
 # Face recognigation imports
 from face_recognigation.face_recognigation import add_face_to_collection, recognize_face
+# In your app.py (or where you're using the models)
+from face_recognigation._component.model import SessionLocal, UserMetadata
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+
+
 # # PDF data extraction imports
 from pdf_data_extraction.app.config import TEMP_UPLOAD_DIR
 from pdf_data_extraction.app.pdf_utils import extract_text_from_pdf, chunk_text
@@ -103,6 +109,19 @@ load_dotenv()  # Load environment variables from .env file
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# Database setup
+DATABASE_URL = "postgresql://postgres:demo.holbox.ai@database-1.carkqwcosit4.us-east-1.rds.amazonaws.com:5432/face_detection"
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+#face_recognigation database setup
+# Dependency to get the database session
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 @app.post("/api/demo_backend_v2/detect_faces")
 async def detect_faces_api(video: UploadFile = File(...)):
@@ -128,38 +147,101 @@ async def detect_faces_api(video: UploadFile = File(...)):
 
     return JSONResponse(content=response)
 
+print(os.getenv("DATABASE_URL"))
+
+
+
 @app.post("/api/demo_backend_v2/add_face")
-async def add_face_api(image: UploadFile = File(...), name: str = Form(...)):
+async def add_user_face_api(image: UploadFile = File(...), name: str = Form(...), age: int = Form(None), gender: str = Form(None)):
     """
-    API endpoint to add a face to the collection.
+    API endpoint to add a face to the collection and store user data in RDS.
     """
     if not image.filename:
         raise HTTPException(status_code=400, detail="Invalid file name.")
+
     # Save uploaded image to a file
     file_path = os.path.join(UPLOAD_FOLDER, image.filename)
     with open(file_path, "wb") as f:
         f.write(await image.read())
-    # Add face to collection
-    result = add_face_to_collection(file_path, name)
+
+    # Add face to collection and store metadata in RDS
+    result = add_face_to_collection(file_path, name)  # This function adds the face to Rekognition
+
+    if "face_id" not in result:
+        raise HTTPException(status_code=500, detail="Face addition to Rekognition failed.")
+
+    # Store user metadata in RDS
+    db_session = SessionLocal()
+    user_metadata = UserMetadata(
+        face_id=result['face_id'],  # The face_id returned from Rekognition
+        name=name,
+        age=age,
+        gender=gender,
+        timestamp=datetime.now()
+    )
+
+    db_session.add(user_metadata)  # Add the user metadata to the session
+    db_session.commit()  # Commit the transaction to save it to the database
+    db_session.close()  # Close the session
+
     # Clean up the temporary file
     os.remove(file_path)
-    return result
+
+    return {"message": "Face added and metadata saved successfully", "face_id": result['face_id']}
+
 @app.post("/api/demo_backend_v2/recognize_face")
 async def recognize_face_api(image: UploadFile = File(...)):
     """
-    API endpoint to recognize a face from the collection.
+    API endpoint to recognize a face from the collection and retrieve associated user data.
     """
     if not image.filename:
         raise HTTPException(status_code=400, detail="Invalid file name.")
+
     # Save uploaded image to a file
     file_path = os.path.join(UPLOAD_FOLDER, image.filename)
     with open(file_path, "wb") as f:
         f.write(await image.read())
-    # Recognize face
-    result = recognize_face(file_path)
+
+    # Recognize face using Rekognition
+    result = recognize_face(file_path)  # This function searches for the face in Rekognition's collection
+
+    logger.info(f"Recognition result: {result}")  # Log the result for debugging
+
+    if result["recognized"]:
+        face_id = result["face_id"]  # Use face_id to query database instead of 'name'
+        logger.info(f"Recognized face_id: {face_id}")  # Log the face_id
+
+        # Retrieve user metadata from RDS using face_id
+        db_session = SessionLocal()
+        user_metadata = db_session.query(UserMetadata).filter(UserMetadata.face_id == face_id).first()
+
+        if user_metadata:
+            logger.info(f"User metadata found: {user_metadata.name}, {user_metadata.age}, {user_metadata.gender}")
+            
+            result.update({
+                "user_name": user_metadata.name,
+                "user_age": user_metadata.age,
+                "user_gender": user_metadata.gender,
+                "user_timestamp": user_metadata.timestamp,
+                "user_id": user_metadata.id  # Add all metadata fields you need
+            })
+        else:
+            result.update({
+                "message": "Face recognized, but no user data found"
+            })
+
+        db_session.close()
+    else:
+        logger.info("No face recognized")
+
     # Clean up the temporary file
     os.remove(file_path)
+
     return result
+
+
+
+
 
 @app.on_event("startup")
 async def startup_event():
