@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request, WebSocket, status, Query, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, WebSocket, status, Query, Form, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 import traceback
 import logging
 import base64
-
+from auth import get_current_user  # Import the authentication dependency
 
 logging.basicConfig(
     level=logging.INFO,
@@ -75,6 +75,9 @@ from summarizer.openai_utils import generate_summary
 ## Voice agent imports
 from voice_agent.voice_agent import voice_websocket_endpoint
 
+
+
+
 # # Initialize instances of your assistants
 ddx_assistant = DDxAssistant()
 pii_redactor = PiiRedactor()
@@ -89,7 +92,7 @@ class PiiRequest(BaseModel):
 
 
 # Initialize FastAPI app
-app = FastAPI()
+app = FastAPI(dependencies=[Depends(get_current_user)])  # All endpoints will require authentication by default
 
 # Enable CORS for all origins
 app.add_middleware(
@@ -247,7 +250,7 @@ async def recognize_face_api(image: UploadFile = File(...)):
 
 @app.on_event("startup")
 async def startup_event():
-    asyncio.create_task(cleanup_task())
+    # asyncio.create_task(cleanup_task())
     asyncio.create_task(cleanup_task_summ())
 
 
