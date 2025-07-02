@@ -21,7 +21,7 @@ asyncio
 Werkzeug
 sqlalchemy
 pillow
-# psycopg2
+psycopg2
 numpy<2
 Pillow
 torch>=2.0,<2.6
