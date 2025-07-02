@@ -7,7 +7,6 @@ uvicorn[standard]
 PyMuPDF
 openai
 faiss-cpu
-numpy
 python-dotenv
 newberryai
 pydantic
@@ -22,4 +21,8 @@ asyncio
 Werkzeug
 sqlalchemy
 pillow
-psycopg2
+# psycopg2
+numpy<2
+Pillow
+torch>=2.0,<2.6
+transformers==4.40.2

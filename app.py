@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 import uuid
 from pydantic import BaseModel
+from typing import List
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import asyncio
@@ -70,7 +71,28 @@ from summarizer.config import TEMP_UPLOAD_DIR_SUMM
 from summarizer.pdf_utils import extract_text_from_pdf
 from summarizer.openai_utils import generate_summary
 
-## Voice agent imports
+#Image search imports
+import shutil
+import tempfile
+from img_search.embedder import Embedder
+from img_search.s3_utils import S3Utils, ImageSearchRequest, ImageSearchResult
+from img_search.vector_store import VectorStore
+
+IMAGE_S3_BUCKET = "image2search"
+FAISS_INDEX_FILE = "image_faiss_index.bin"
+IMAGE_METADATA_FILE = "image_metadata.json"
+s3_utils = S3Utils()
+embedder = Embedder()
+vector_store = VectorStore()
+if not os.path.exists(FAISS_INDEX_FILE):
+    s3_utils.download_file(IMAGE_S3_BUCKET, FAISS_INDEX_FILE, FAISS_INDEX_FILE)
+if not os.path.exists(IMAGE_METADATA_FILE):
+    s3_utils.download_file(IMAGE_S3_BUCKET, IMAGE_METADATA_FILE, IMAGE_METADATA_FILE)
+
+vector_store.load_index_and_metadata(FAISS_INDEX_FILE, IMAGE_METADATA_FILE)
+known_folder_names_lower = vector_store.get_unique_folder_names()
+
+# Voice agent imports
 from voice_agent.voice_agent import voice_websocket_endpoint
 
 # # Initialize instances of your assistants
@@ -617,3 +639,51 @@ async def generate_image_endpoint(request: ImageGenerationRequest):
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy"}
+
+
+#Image search API endpoints
+@app.post("/api/demo_backend_v2/image_search/search", response_model=List[ImageSearchResult])
+def image_text_search(request: ImageSearchRequest):
+    filter_by_folder = request.folder
+    if not filter_by_folder:
+        filter_by_folder = s3_utils.detect_folder_from_query(request.query, known_folder_names_lower)
+
+    query_embedding = embedder.get_text_embedding(request.query)
+    search_results = vector_store.search_images(query_embedding, k=request.k, filter_folder=filter_by_folder)
+
+    results = []
+    for distance, image_s3_path, folder_name in search_results:
+        image_url = s3_utils.get_image_url_from_s3_path(image_s3_path)
+        results.append(ImageSearchResult(
+            distance=float(distance),
+            folder=folder_name,
+            s3_path=image_s3_path,
+            image_url=image_url
+        ))
+    return results
+
+
+@app.post("/api/demo_backend_v2/image_search/search_by_image", response_model=List[ImageSearchResult])
+async def image_file_search(file: UploadFile = File(...), k: int = 5):
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+        shutil.copyfileobj(file.file, tmp)
+        tmp_path = tmp.name
+
+    try:
+        query_embedding = embedder.get_image_embedding_from_file(tmp_path)
+        search_results = vector_store.search_images(query_embedding, k=k)
+
+        results = []
+        for distance, image_s3_path, folder_name in search_results:
+            image_url = s3_utils.get_image_url_from_s3_path(image_s3_path)
+            results.append(ImageSearchResult(
+                distance=float(distance),
+                folder=folder_name,
+                s3_path=image_s3_path,
+                image_url=image_url
+            ))
+        return results
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
+        os.remove(tmp_path)
