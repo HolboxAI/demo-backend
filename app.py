@@ -75,8 +75,21 @@ from summarizer.openai_utils import generate_summary
 ## Voice agent imports
 from voice_agent.voice_agent import voice_websocket_endpoint
 
+# Dependency to get the Authorization token
+def get_authorization_header(request: Request):
+    authorization_header = request.headers.get("Authorization")
+    if authorization_header is None:
+        raise HTTPException(status_code=401, detail="Authorization header is missing")
+    
+    # You can also add token validation here if needed
+    token = authorization_header.split("Bearer ")[-1]  # Extract the token
+    if not token:
+        raise HTTPException(status_code=401, detail="Invalid Authorization format")
+    
+    return token  # Return the token to use in the endpoint functions
 
-
+# Initialize FastAPI app
+app = FastAPI(dependencies=[Depends(get_authorization_header)]) # All endpoints will require authentication by default
 
 # # Initialize instances of your assistants
 ddx_assistant = DDxAssistant()
@@ -91,8 +104,6 @@ class PiiRequest(BaseModel):
     text: str
 
 
-# Initialize FastAPI app
-app = FastAPI(dependencies=[Depends(get_current_user)])  # All endpoints will require authentication by default
 
 # Enable CORS for all origins
 app.add_middleware(
@@ -118,6 +129,21 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 DATABASE_URL = "postgresql://postgres:demo.holbox.ai@database-1.carkqwcosit4.us-east-1.rds.amazonaws.com:5432/face_detection"
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+# Dependency to get the Authorization token
+def get_authorization_header(request: Request):
+    authorization_header = request.headers.get("Authorization")
+    if authorization_header is None:
+        raise HTTPException(status_code=401, detail="Authorization header is missing")
+    
+    # You can also add token validation here if needed
+    token = authorization_header.split("Bearer ")[-1]  # Extract the token
+    if not token:
+        raise HTTPException(status_code=401, detail="Invalid Authorization format")
+    
+    return token  # Return the token to use in the endpoint functions
+
 
 #face_recognigation database setup
 # Dependency to get the database session
@@ -155,9 +181,8 @@ async def detect_faces_api(video: UploadFile = File(...)):
 print(os.getenv("DATABASE_URL"))
 
 
-
 @app.post("/api/demo_backend_v2/add_face")
-async def add_user_face_api(image: UploadFile = File(...), name: str = Form(...), age: int = Form(None), gender: str = Form(None)):
+async def add_user_face_api(image: UploadFile = File(...), name: str = Form(...), age: int = Form(None), gender: str = Form(None),token: str = Depends(get_authorization_header)):
     """
     API endpoint to add a face to the collection and store user data in RDS.
     """
@@ -322,9 +347,12 @@ async def get_summary(request: SummaryRequest):
 
 
 @app.post("/api/demo_backend_v2/ddx")
-async def ask_ddx(request: QuestionRequest):
-    response = ddx_assistant.ask(request.question)
+async def ask_ddx(question_request: QuestionRequest, token: str = Depends(get_authorization_header)):
+    # logger.info(f"Received Authorization Token: {token}")
+    # Now you can use the token for validation or other purposes
+    response = ddx_assistant.ask(question_request.question)
     return {"answer": response}
+
 
   
 @app.post("/api/demo_backend_v2/redact")
@@ -523,22 +551,18 @@ async def ask_nl2sql_endpoint(request: QuestionRequest):
 #     except Exception as e:
 #         raise HTTPException(status_code=500, detail=f"Virtual try-on processing failed: {str(e)}")
 
-@app.post("/api/demo_backend_v2/virtual-tryon/run")
-async def virtual_tryon_run(
-    model_image: UploadFile = File(...),
-    garment_image: UploadFile = File(...)
-):
-    # Read file content and convert to base64
-    model_image_b64 = base64.b64encode(await model_image.read()).decode()
-    garment_image_b64 = base64.b64encode(await garment_image.read()).decode()
-    # Always set category to 'tops'
-    request = VirtualTryOnRequest(
-        model_image=model_image_b64,
-        garment_image=garment_image_b64,
-        category="tops"
-    )
-    result = await handle_process(request)
-    return result
+#Virtual try on backend API endpoints
+@app.post("/api/demo_backend_v2/virtual-tryon/run", response_model=VirtualTryOnResponse)
+async def virtual_tryon_run(request: VirtualTryOnRequest):
+    """
+    Process virtual try-on request (equivalent to handleProcess in React)
+    """
+    try:
+        
+        result = await handle_process(request)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Virtual try-on processing failed: {str(e)}")
 
 @app.get("/api/demo_backend_v2/virtual-tryon/status/{job_id}", response_model=StatusResponse)
 async def virtual_tryon_status(job_id: str):
@@ -546,6 +570,7 @@ async def virtual_tryon_status(job_id: str):
     Get the status of a virtual try-on job (equivalent to pollPredictionStatus in React)
     """
     try:
+        
         result = await get_status(job_id)
         return result
     except HTTPException:
@@ -619,21 +644,53 @@ async def get_video_status(job_id: str = Query(..., description="Full invocation
     
 
 # Voice Agent WebSocket Endpoint
+# @app.websocket("/api/demo_backend_v2/voice_agent/voice")
+# async def websocket_route(ws: WebSocket):
+#     print("WebSocket connection opened")
+#     await ws.accept()
+#     try:
+#         while True:
+#             data = await ws.receive_text()
+#             print("Received data:", data)
+#             await ws.send_text(f"Message received: {data}")
+#     except Exception as e:
+#         print(f"Error during WebSocket communication: {e}")
+#     finally:
+#         print("WebSocket connection closed")
+#         await ws.close()
+
 @app.websocket("/api/demo_backend_v2/voice_agent/voice")
 async def websocket_route(ws: WebSocket):
-    print("WebSocket connection opened")
     await ws.accept()
+    print("WebSocket connection established")
+    
     try:
+        # Wait for the first message containing the token
+        message = await ws.receive_text()
+        data = json.loads(message)
+        
+        if data.get('type') == 'authenticate' and data.get('token'):
+            token = data['token']
+            
+            # Decode and validate token (you can use your existing authentication function)
+            payload = decode_token(token)
+            print(f"Authenticated user: {payload}")
+        else:
+            raise HTTPException(status_code=400, detail="Authentication required")
+        
+        # Handle communication (after successful authentication)
         while True:
             data = await ws.receive_text()
             print("Received data:", data)
             await ws.send_text(f"Message received: {data}")
+
     except Exception as e:
         print(f"Error during WebSocket communication: {e}")
+        await ws.close()
+
     finally:
         print("WebSocket connection closed")
         await ws.close()
-
 
 
 # Static files for generated images
