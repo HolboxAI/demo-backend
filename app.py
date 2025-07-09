@@ -78,7 +78,7 @@ from img_search.embedder import Embedder
 from img_search.s3_utils import S3Utils, ImageSearchRequest, ImageSearchResult
 from img_search.vector_store import VectorStore
 
-IMAGE_S3_BUCKET = "image2search"
+IMAGE_S3_BUCKET = "txt-img-2-img"
 FAISS_INDEX_FILE = "image_faiss_index.bin"
 IMAGE_METADATA_FILE = "image_metadata.json"
 s3_utils = S3Utils()
