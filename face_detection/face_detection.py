@@ -11,6 +11,14 @@ rekognition_client = boto3.client("rekognition", region_name="us-east-1")
 FACE_COLLECTION_ID = "face-db-001"
 
 def process_video_frames(video_path: str, max_frames: int = 20):
+    # Create Rekognition client using AccountB credentials
+    rekognition_client = boto3.client(
+        "rekognition",
+        region_name="us-east-1",
+        aws_access_key_id=os.environ["AWS_ACCOUNTB_ACCESS_KEY_ID"],
+        aws_secret_access_key=os.environ["AWS_ACCOUNTB_SECRET_ACCESS_KEY"],
+        # aws_session_token=os.environ.get("AWS_ACCOUNTB_SESSION_TOKEN"),
+    )
     """
     Extracts up to `max_frames` evenly spaced frames from a video and checks each with AWS Rekognition.
     """

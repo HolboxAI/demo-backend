@@ -72,6 +72,7 @@ from summarizer.config import TEMP_UPLOAD_DIR_SUMM
 from summarizer.pdf_utils import extract_text_from_pdf
 from summarizer.openai_utils import generate_summary
 
+
 ## Voice agent imports
 from voice_agent.voice_agent import voice_websocket_endpoint
 
@@ -90,6 +91,8 @@ def get_authorization_header(request: Request):
 
 # Initialize FastAPI app
 app = FastAPI(dependencies=[Depends(get_authorization_header)]) # All endpoints will require authentication by default
+
+# organization router
 
 # # Initialize instances of your assistants
 ddx_assistant = DDxAssistant()
@@ -713,3 +716,4 @@ async def generate_image_endpoint(request: ImageGenerationRequest):
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy"}
+
