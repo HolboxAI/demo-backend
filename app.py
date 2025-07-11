@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request, WebSocket, status, Query, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, WebSocket, status, Query, Form, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -11,6 +11,8 @@ from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 import traceback
 import logging
+import base64
+from auth import get_current_user  # Import the authentication dependency
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,11 +44,11 @@ from sqlalchemy.orm import Session, sessionmaker
 
 
 # # PDF data extraction imports
-from pdf_data_extraction.app.config import TEMP_UPLOAD_DIR
-from pdf_data_extraction.app.pdf_utils import extract_text_from_pdf, chunk_text
-from pdf_data_extraction.app.embeddings import store_embeddings, query_embeddings, generate_answer
-from pdf_data_extraction.app.models import UploadResponse, QuestionRequestPDF, AnswerResponse
-from pdf_data_extraction.app.cleanup import cleanup_task
+# from pdf_data_extraction.app.config import TEMP_UPLOAD_DIR
+# from pdf_data_extraction.app.pdf_utils import extract_text_from_pdf, chunk_text
+# from pdf_data_extraction.app.embeddings import store_embeddings, query_embeddings, generate_answer
+# from pdf_data_extraction.app.models import UploadResponse, QuestionRequestPDF, AnswerResponse
+# from pdf_data_extraction.app.cleanup import cleanup_task
 
 from ddx.ddx import DDxAssistant
 from pii_redactor.redactor import PiiRedactor
@@ -70,8 +72,27 @@ from summarizer.config import TEMP_UPLOAD_DIR_SUMM
 from summarizer.pdf_utils import extract_text_from_pdf
 from summarizer.openai_utils import generate_summary
 
+
 ## Voice agent imports
 from voice_agent.voice_agent import voice_websocket_endpoint
+
+# Dependency to get the Authorization token
+def get_authorization_header(request: Request):
+    authorization_header = request.headers.get("Authorization")
+    if authorization_header is None:
+        raise HTTPException(status_code=401, detail="Authorization header is missing")
+    
+    # You can also add token validation here if needed
+    token = authorization_header.split("Bearer ")[-1]  # Extract the token
+    if not token:
+        raise HTTPException(status_code=401, detail="Invalid Authorization format")
+    
+    return token  # Return the token to use in the endpoint functions
+
+# Initialize FastAPI app
+app = FastAPI(dependencies=[Depends(get_authorization_header)]) # All endpoints will require authentication by default
+
+# organization router
 
 # # Initialize instances of your assistants
 ddx_assistant = DDxAssistant()
@@ -86,8 +107,6 @@ class PiiRequest(BaseModel):
     text: str
 
 
-# Initialize FastAPI app
-app = FastAPI()
 
 # Enable CORS for all origins
 app.add_middleware(
@@ -113,6 +132,21 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 DATABASE_URL = "postgresql://postgres:demo.holbox.ai@database-1.carkqwcosit4.us-east-1.rds.amazonaws.com:5432/face_detection"
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+# Dependency to get the Authorization token
+def get_authorization_header(request: Request):
+    authorization_header = request.headers.get("Authorization")
+    if authorization_header is None:
+        raise HTTPException(status_code=401, detail="Authorization header is missing")
+    
+    # You can also add token validation here if needed
+    token = authorization_header.split("Bearer ")[-1]  # Extract the token
+    if not token:
+        raise HTTPException(status_code=401, detail="Invalid Authorization format")
+    
+    return token  # Return the token to use in the endpoint functions
+
 
 #face_recognigation database setup
 # Dependency to get the database session
@@ -150,9 +184,8 @@ async def detect_faces_api(video: UploadFile = File(...)):
 print(os.getenv("DATABASE_URL"))
 
 
-
 @app.post("/api/demo_backend_v2/add_face")
-async def add_user_face_api(image: UploadFile = File(...), name: str = Form(...), age: int = Form(None), gender: str = Form(None)):
+async def add_user_face_api(image: UploadFile = File(...), name: str = Form(...), age: int = Form(None), gender: str = Form(None),token: str = Depends(get_authorization_header)):
     """
     API endpoint to add a face to the collection and store user data in RDS.
     """
@@ -245,7 +278,7 @@ async def recognize_face_api(image: UploadFile = File(...)):
 
 @app.on_event("startup")
 async def startup_event():
-    asyncio.create_task(cleanup_task())
+    # asyncio.create_task(cleanup_task())
     asyncio.create_task(cleanup_task_summ())
 
 
@@ -275,51 +308,54 @@ async def get_summary(request: SummaryRequest):
 
     return SummaryResponse(summary=summary)
 
-@app.post("/api/demo_backend_v2/pdf_data_extraction/upload_pdf", response_model=UploadResponse)
-async def upload_pdf(file: UploadFile = File(...)):
-    if not file.filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
-    pdf_id = f"{uuid.uuid4()}.pdf"
-    pdf_path = os.path.join(TEMP_UPLOAD_DIR, pdf_id)
+# @app.post("/api/demo_backend_v2/pdf_data_extraction/upload_pdf", response_model=UploadResponse)
+# async def upload_pdf(file: UploadFile = File(...)):
+#     if not file.filename.endswith(".pdf"):
+#         raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+#     pdf_id = f"{uuid.uuid4()}.pdf"
+#     pdf_path = os.path.join(TEMP_UPLOAD_DIR, pdf_id)
 
-    with open(pdf_path, "wb") as f:
-        content = await file.read()
-        f.write(content)
+#     with open(pdf_path, "wb") as f:
+#         content = await file.read()
+#         f.write(content)
 
-    # Extract text & chunk
-    pages = extract_text_from_pdf(pdf_path)
-    chunks = chunk_text(pages)
+#     # Extract text & chunk
+#     pages = extract_text_from_pdf(pdf_path)
+#     chunks = chunk_text(pages)
 
-    # Store embeddings in vector DB
-    store_embeddings(pdf_id, chunks)
+#     # Store embeddings in vector DB
+#     store_embeddings(pdf_id, chunks)
 
-    return UploadResponse(pdf_id=pdf_id, message="PDF uploaded and processed successfully")
+#     return UploadResponse(pdf_id=pdf_id, message="PDF uploaded and processed successfully")
 
 
-@app.post("/api/demo_backend_v2/pdf_data_extraction/ask_question", response_model=AnswerResponse)
-async def ask_question(req: QuestionRequestPDF):
-    if not req.pdf_id:
-        raise HTTPException(status_code=400, detail="PDF ID is required")
+# @app.post("/api/demo_backend_v2/pdf_data_extraction/ask_question", response_model=AnswerResponse)
+# async def ask_question(req: QuestionRequestPDF):
+#     if not req.pdf_id:
+#         raise HTTPException(status_code=400, detail="PDF ID is required")
     
-    retrieved_chunks = query_embeddings(req.pdf_id, req.question, top_k=3)
-    if not retrieved_chunks:
-        return AnswerResponse(answer="No relevant information found.", source_chunks=[])
+#     retrieved_chunks = query_embeddings(req.pdf_id, req.question, top_k=3)
+#     if not retrieved_chunks:
+#         return AnswerResponse(answer="No relevant information found.", source_chunks=[])
 
-    context_texts = [chunk["text"] for chunk in retrieved_chunks]
+#     context_texts = [chunk["text"] for chunk in retrieved_chunks]
 
-    answer = generate_answer(req.question, context_texts)
+#     answer = generate_answer(req.question, context_texts)
 
-    return AnswerResponse(answer=answer, source_chunks=context_texts)
+#     return AnswerResponse(answer=answer, source_chunks=context_texts)
 
-@app.get("/api/demo_backend_v2/")
-async def root():
-    return {"message": "Welcome to the FastAPI application!"}
+# @app.get("/api/demo_backend_v2/")
+# async def root():
+#     return {"message": "Welcome to the FastAPI application!"}
 
 
 @app.post("/api/demo_backend_v2/ddx")
-async def ask_ddx(request: QuestionRequest):
-    response = ddx_assistant.ask(request.question)
+async def ask_ddx(question_request: QuestionRequest, token: str = Depends(get_authorization_header)):
+    # logger.info(f"Received Authorization Token: {token}")
+    # Now you can use the token for validation or other purposes
+    response = ddx_assistant.ask(question_request.question)
     return {"answer": response}
+
 
   
 @app.post("/api/demo_backend_v2/redact")
@@ -496,9 +532,27 @@ async def start_transcription_route(request: Request):
     
 @app.post("/api/demo_backend_v2/nl2sql/ask")
 async def ask_nl2sql_endpoint(request: QuestionRequest):
-    response = ask_nl2sql(request.question)
-    return {"answer": response}
+    try:
+        response = ask_nl2sql(request.question)
+        return {"answer": response}
+    except Exception as e:
+        logger.error(f"Error in nl2sql endpoint: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error processing NL2SQL request.")
 
+
+
+#Virtual try on backend API endpoints
+# @app.post("/api/demo_backend_v2/virtual-tryon/run", response_model=VirtualTryOnResponse)
+# async def virtual_tryon_run(request: VirtualTryOnRequest):
+#     """
+#     Process virtual try-on request (equivalent to handleProcess in React)
+#     """
+#     try:
+        
+#         result = await handle_process(request)
+#         return result
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Virtual try-on processing failed: {str(e)}")
 
 #Virtual try on backend API endpoints
 @app.post("/api/demo_backend_v2/virtual-tryon/run", response_model=VirtualTryOnResponse)
@@ -526,6 +580,7 @@ async def virtual_tryon_status(job_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get job status: {str(e)}")
+
 
 @app.post(
     "/api/demo_backend_v2/generate-video",
@@ -592,9 +647,53 @@ async def get_video_status(job_id: str = Query(..., description="Full invocation
     
 
 # Voice Agent WebSocket Endpoint
+# @app.websocket("/api/demo_backend_v2/voice_agent/voice")
+# async def websocket_route(ws: WebSocket):
+#     print("WebSocket connection opened")
+#     await ws.accept()
+#     try:
+#         while True:
+#             data = await ws.receive_text()
+#             print("Received data:", data)
+#             await ws.send_text(f"Message received: {data}")
+#     except Exception as e:
+#         print(f"Error during WebSocket communication: {e}")
+#     finally:
+#         print("WebSocket connection closed")
+#         await ws.close()
+
 @app.websocket("/api/demo_backend_v2/voice_agent/voice")
 async def websocket_route(ws: WebSocket):
-    await voice_websocket_endpoint(ws)
+    await ws.accept()
+    print("WebSocket connection established")
+    
+    try:
+        # Wait for the first message containing the token
+        message = await ws.receive_text()
+        data = json.loads(message)
+        
+        if data.get('type') == 'authenticate' and data.get('token'):
+            token = data['token']
+            
+            # Decode and validate token (you can use your existing authentication function)
+            payload = decode_token(token)
+            print(f"Authenticated user: {payload}")
+        else:
+            raise HTTPException(status_code=400, detail="Authentication required")
+        
+        # Handle communication (after successful authentication)
+        while True:
+            data = await ws.receive_text()
+            print("Received data:", data)
+            await ws.send_text(f"Message received: {data}")
+
+    except Exception as e:
+        print(f"Error during WebSocket communication: {e}")
+        await ws.close()
+
+    finally:
+        print("WebSocket connection closed")
+        await ws.close()
 
 
 # Static files for generated images
@@ -617,3 +716,4 @@ async def generate_image_endpoint(request: ImageGenerationRequest):
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy"}
+
