@@ -135,7 +135,7 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Database setup
 #DATABASE_URL = "postgresql://postgres:demo.holbox.ai@database-1.carkqwcosit4.us-east-1.rds.amazonaws.com:5432/face_detection"
-DATABASE_URL="mysql+pymysql://nl2sql_admin:Holbox_nl2sql@nl2sql-demo.carkqwcosit4.us-east-1.rds.amazonaws.com:3306/face_detection"
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
