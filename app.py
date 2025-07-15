@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request, WebSocket, status, Query, Form, Depends
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -89,9 +90,13 @@ def get_authorization_header(request: Request):
     
     return token  # Return the token to use in the endpoint functions
 
-# Initialize FastAPI app
-app = FastAPI(dependencies=[Depends(get_authorization_header)]) # All endpoints will require authentication by default
+api_router = APIRouter(dependencies=[Depends(get_current_user)])
 
+
+# Initialize FastAPI app
+# app = FastAPI(dependencies=[Depends(get_authorization_header)]) # All endpoints will require authentication by default
+app = FastAPI()
+app.include_router(api_router)
 # organization router
 
 # # Initialize instances of your assistants
@@ -129,7 +134,9 @@ UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Database setup
-DATABASE_URL = "postgresql://postgres:demo.holbox.ai@database-1.carkqwcosit4.us-east-1.rds.amazonaws.com:5432/face_detection"
+#DATABASE_URL = "postgresql://postgres:demo.holbox.ai@database-1.carkqwcosit4.us-east-1.rds.amazonaws.com:5432/face_detection"
+DATABASE_URL="mysql+pymysql://nl2sql_admin:Holbox_nl2sql@nl2sql-demo.carkqwcosit4.us-east-1.rds.amazonaws.com:3306/face_detection"
+
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
