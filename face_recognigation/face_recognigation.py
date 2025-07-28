@@ -1,4 +1,5 @@
 import boto3
+
 import cv2
 import os
 from fastapi import HTTPException
@@ -175,27 +176,47 @@ def delete_face_by_photo(image_path: str, db: Session):
     return {"message": message}
 
 # Function to upload the image to S3 using boto3 (synchronous)
+# def upload_to_s3(image_bytes, s3_key):
+#     try:
+#         # Upload the image to S3 bucket
+#         response = s3_client.put_object(
+#             Bucket=S3_BUCKET_NAME,
+#             Key=s3_key,
+#             Body=image_bytes,
+#             ContentType='image/jpeg',  # Adjust the content type if necessary
+#         )
+
+#         # Check if the upload was successful by checking the HTTPStatusCode
+#         if response['ResponseMetadata']['HTTPStatusCode'] == 200:
+#             print(f"Successfully uploaded {s3_key} to S3.")
+#         else:
+#             raise HTTPException(status_code=500, detail=f"Failed to upload image to S3. Response: {response}")
+
+#         # Generate the URL to access the uploaded image
+#         image_url = f"https://{S3_BUCKET_NAME}.s3.amazonaws.com/{s3_key}"
+#         return image_url
+#     except Exception as e:
+        
+#         raise HTTPException(status_code=500, detail=f"Error uploading to S3: {str(e)}")
+
 def upload_to_s3(image_bytes, s3_key):
     try:
-        # Upload the image to S3 bucket
         response = s3_client.put_object(
             Bucket=S3_BUCKET_NAME,
             Key=s3_key,
             Body=image_bytes,
-            ContentType='image/jpeg',  # Adjust the content type if necessary
+            ContentType='image/jpeg',
+            
         )
 
-        # Check if the upload was successful by checking the HTTPStatusCode
         if response['ResponseMetadata']['HTTPStatusCode'] == 200:
-            print(f"Successfully uploaded {s3_key} to S3.")
+            # US East 1 format:
+            image_url = f"https://s3.us-east-1.amazonaws.com/{S3_BUCKET_NAME}/{s3_key}"
+            return image_url
         else:
             raise HTTPException(status_code=500, detail=f"Failed to upload image to S3. Response: {response}")
 
-        # Generate the URL to access the uploaded image
-        image_url = f"https://{S3_BUCKET_NAME}.s3.amazonaws.com/{s3_key}"
-        return image_url
     except Exception as e:
-        
         raise HTTPException(status_code=500, detail=f"Error uploading to S3: {str(e)}")
 
 
