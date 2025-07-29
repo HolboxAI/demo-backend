@@ -19,6 +19,7 @@ class UserMetadata(Base):
     age = Column(Integer, nullable=True)
     gender = Column(String(50), nullable=True)  # Set length for VARCHAR
     timestamp = Column(DateTime)
+    image_url = Column(String) 
 
 # Database URL for MySQL (make sure to adjust as needed)
 DATABASE_URL = "mysql+pymysql://nl2sql_admin:Holbox_nl2sql@nl2sql-demo.carkqwcosit4.us-east-1.rds.amazonaws.com:3306/face_detection"
