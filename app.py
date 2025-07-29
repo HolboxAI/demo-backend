@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request, WebSocket, status, Query, Form, Depends
+from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException, Request, WebSocket, status, Query, Form, Depends
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -37,9 +37,11 @@ from healthscribe.healthscribe import allowed_file, upload_to_s3, fetch_summary,
 # # Face detection imports
 from face_detection.face_detection import process_video_frames
 # Face recognigation imports
-from face_recognigation.face_recognigation import add_face_to_collection, recognize_face
+from face_recognigation.face_recognigation import add_face_to_collection, recognize_face,add_face_and_upload
+from face_recognigation.face_recognigation import get_rekognition_client_accountB, FACE_COLLECTION_ID
 # In your app.py (or where you're using the models)
 from face_recognigation._component.model import SessionLocal, UserMetadata
+from face_recognigation.face_recognigation import delete_face_by_photo
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -164,6 +166,7 @@ def get_db():
     finally:
         db.close()
 
+
 @app.post("/api/demo_backend_v2/detect_faces")
 async def detect_faces_api(video: UploadFile = File(...)):
     """
@@ -188,46 +191,87 @@ async def detect_faces_api(video: UploadFile = File(...)):
 
     return JSONResponse(content=response)
 
-print(os.getenv("DATABASE_URL"))
 
 
+
+# @app.post("/api/demo_backend_v2/add_face")
+# async def add_user_face_api(image: UploadFile = File(...), name: str = Form(...), age: int = Form(None), gender: str = Form(None),token: str = Depends(get_authorization_header)):
+#     """
+#     API endpoint to add a face to the collection and store user data in RDS.
+#     """
+#     if not image.filename:
+#         raise HTTPException(status_code=400, detail="Invalid file name.")
+
+#     # Save uploaded image to a file
+#     file_path = os.path.join(UPLOAD_FOLDER, image.filename)
+#     with open(file_path, "wb") as f:
+#         f.write(await image.read())
+
+#     # Add face to collection and store metadata in RDS
+#     result = add_face_to_collection(file_path, name)  # This function adds the face to Rekognition
+
+#     if "face_id" not in result:
+#         raise HTTPException(status_code=500, detail="Face addition to Rekognition failed.")
+
+#     # Store user metadata in RDS
+#     db_session = SessionLocal()
+#     user_metadata = UserMetadata(
+#         face_id=result['face_id'],  # The face_id returned from Rekognition
+#         name=name,
+#         age=age,
+#         gender=gender,
+#         timestamp=datetime.now()
+#     )
+
+#     db_session.add(user_metadata)  # Add the user metadata to the session
+#     db_session.commit()  # Commit the transaction to save it to the database
+#     db_session.close()  # Close the session
+
+#     # Clean up the temporary file
+#     os.remove(file_path)
+
+#     return {"message": "Face added and metadata saved successfully", "face_id": result['face_id']}
 @app.post("/api/demo_backend_v2/add_face")
-async def add_user_face_api(image: UploadFile = File(...), name: str = Form(...), age: int = Form(None), gender: str = Form(None),token: str = Depends(get_authorization_header)):
+async def add_user_face_api(
+    
+    image: UploadFile = File(...),
+    name: str = Form(...),
+    background_tasks:  BackgroundTasks = BackgroundTasks(),
+    age: int = Form(None),
+    gender: str = Form(None),
+    token: str = Depends(get_authorization_header),
+    
+     # Use BackgroundTasks directly, no Depends
+):
     """
-    API endpoint to add a face to the collection and store user data in RDS.
+    API endpoint to add a face to the collection, upload the image to S3 asynchronously, and store user data in RDS.
     """
     if not image.filename:
         raise HTTPException(status_code=400, detail="Invalid file name.")
 
-    # Save uploaded image to a file
-    file_path = os.path.join(UPLOAD_FOLDER, image.filename)
-    with open(file_path, "wb") as f:
-        f.write(await image.read())
-
-    # Add face to collection and store metadata in RDS
-    result = add_face_to_collection(file_path, name)  # This function adds the face to Rekognition
-
-    if "face_id" not in result:
-        raise HTTPException(status_code=500, detail="Face addition to Rekognition failed.")
+    # Add face to Rekognition, upload to S3, and store user metadata
+    face_id, image_url = await add_face_and_upload(image, name, background_tasks)
 
     # Store user metadata in RDS
     db_session = SessionLocal()
     user_metadata = UserMetadata(
-        face_id=result['face_id'],  # The face_id returned from Rekognition
+        face_id=face_id,  # The face_id returned from Rekognition
         name=name,
         age=age,
         gender=gender,
-        timestamp=datetime.now()
+        timestamp=datetime.now(),
+        image_url=image_url  # Save the image URL in the user metadata table
     )
 
-    db_session.add(user_metadata)  # Add the user metadata to the session
-    db_session.commit()  # Commit the transaction to save it to the database
-    db_session.close()  # Close the session
+    db_session.add(user_metadata)
+    db_session.commit()
+    db_session.close()
 
-    # Clean up the temporary file
-    os.remove(file_path)
+    return {"message": "Face added, image uploaded to S3, and metadata saved successfully", "face_id": face_id, "image_url": image_url}
 
-    return {"message": "Face added and metadata saved successfully", "face_id": result['face_id']}
+
+
+
 
 @app.post("/api/demo_backend_v2/recognize_face")
 async def recognize_face_api(image: UploadFile = File(...)):
@@ -423,7 +467,7 @@ async def start_transcription_route(request: Request):
     BUCKET_NAME = os.getenv('BUCKET_NAME')
     data = await request.json()
     audio_url = data.get('audioUrl')
-    print("Received Audio URL:", audio_url)
+    
 
     if not audio_url:
         raise HTTPException(status_code=400, detail="Audio URL is required.")
@@ -435,7 +479,7 @@ async def start_transcription_route(request: Request):
             filename = os.path.basename(audio_url).rsplit('.', 1)[0]
             # Construct the expected S3 URI for summary.json
             summary_s3_uri = f"s3://{BUCKET_NAME}/health_scribe/predefinedAudios/{filename}_summary.json"
-            print(f"Returning predefined summary URI: {summary_s3_uri}")
+            
             # return {"TranscriptFileUri": summary_s3_uri}
             transcription_summary = fetch_summary(summary_s3_uri)
             return {"summary": transcription_summary}
@@ -449,11 +493,11 @@ async def start_transcription_route(request: Request):
 
         if audio_url.startswith(S3_PUBLIC_PREFIX):
             audio_url = S3_PRIVATE_PREFIX + audio_url[len(S3_PUBLIC_PREFIX):]
-            print("Converted to S3 URL:", audio_url)
+            
 
         PREDEFINED_PREFIX = f"s3://{BUCKET_NAME}/predefined/"
         if audio_url.startswith(PREDEFINED_PREFIX):
-            print("Predefined audio detected. Fetching existing summary...")
+            
 
             filename = os.path.basename(audio_url)
             summary_filename = f"summary_{filename.replace('.mp3', '.json')}"
@@ -471,7 +515,7 @@ async def start_transcription_route(request: Request):
                 raise HTTPException(status_code=400, detail="Invalid audio file path.")
 
         job_name = f"medi_trans_{int(datetime.now().strftime('%Y_%m_%d_%H_%M'))}"
-        print("Starting transcription job:", job_name)
+        
         medical_scribe_output = start_transcription(job_name, audio_url)
 
         if "ClinicalDocumentUri" in medical_scribe_output:
@@ -684,14 +728,14 @@ async def websocket_route(ws: WebSocket):
             
             # Decode and validate token (you can use your existing authentication function)
             payload = decode_token(token)
-            print(f"Authenticated user: {payload}")
+            
         else:
             raise HTTPException(status_code=400, detail="Authentication required")
         
         # Handle communication (after successful authentication)
         while True:
             data = await ws.receive_text()
-            print("Received data:", data)
+            
             await ws.send_text(f"Message received: {data}")
 
     except Exception as e:
@@ -724,3 +768,71 @@ async def health_check():
     """Health check endpoint"""
     return {"status": "healthy"}
 
+
+
+# Delete face from collection and metadata table by photo
+@app.post("/api/demo_backend_v2/delete_face_by_photo")
+async def delete_face_by_photo_api(
+    image: UploadFile = File(...),
+    token: str = Depends(get_authorization_header),
+    db: Session = Depends(get_db)
+):
+    if not image.filename:
+        raise HTTPException(status_code=400, detail="Invalid file name.")
+
+    # Save the uploaded file temporarily
+    file_path = os.path.join(UPLOAD_FOLDER, image.filename)
+    with open(file_path, "wb") as f:
+        f.write(await image.read())
+
+    try:
+        result = delete_face_by_photo(image_path=file_path, db=db)
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+    return result
+
+    #api for search face in collection
+@app.get("/api/demo_backend_v2/users")
+def list_users(
+    search: str = Query("", alias="search"), 
+    db: Session = Depends(get_db)
+):
+    """
+    List users, optionally filtered by name (case-insensitive search).
+    """
+    query = db.query(UserMetadata)
+    if search:
+        query = query.filter(UserMetadata.name.ilike(f"%{search}%"))
+    users = query.all()
+    return [
+        {
+            "name": user.name,
+            "face_id": user.face_id,
+            "image_url": user.image_url,  # Include image URL
+        }
+        for user in users
+    ]
+#api for delete user by face_id
+@app.delete("/api/demo_backend_v2/users/{face_id}")
+def delete_user(face_id: str, db: Session = Depends(get_db)):
+    """
+    Delete user from DB and Rekognition by face_id.
+    """
+    user = db.query(UserMetadata).filter(UserMetadata.face_id == face_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    # Delete from Rekognition
+    rekognition_client = get_rekognition_client_accountB()
+    rekognition_client.delete_faces(
+        CollectionId=FACE_COLLECTION_ID,
+        FaceIds=[face_id]
+    )
+
+    # Delete from DB
+    db.delete(user)
+    db.commit()
+
+    return {"message": f"User and face {face_id} deleted."}
