@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import uuid
+import shutil
 from pydantic import BaseModel
 from werkzeug.utils import secure_filename
 from datetime import datetime
