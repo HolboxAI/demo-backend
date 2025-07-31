@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import uuid
+import shutil
 from pydantic import BaseModel
 from werkzeug.utils import secure_filename
 from datetime import datetime
@@ -14,6 +15,8 @@ import traceback
 import logging
 import base64
 from auth import get_current_user  # Import the authentication dependency
+
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -78,6 +81,11 @@ from summarizer.openai_utils import generate_summary
 
 ## Voice agent imports
 from voice_agent.voice_agent import voice_websocket_endpoint
+
+
+# handwritten
+from handwritten.handwritten import extract_handwritten_text
+
 
 # Dependency to get the Authorization token
 def get_authorization_header(request: Request):
@@ -359,45 +367,6 @@ async def get_summary(request: SummaryRequest):
 
     return SummaryResponse(summary=summary)
 
-# @app.post("/api/demo_backend_v2/pdf_data_extraction/upload_pdf", response_model=UploadResponse)
-# async def upload_pdf(file: UploadFile = File(...)):
-#     if not file.filename.endswith(".pdf"):
-#         raise HTTPException(status_code=400, detail="Only PDF files are allowed")
-#     pdf_id = f"{uuid.uuid4()}.pdf"
-#     pdf_path = os.path.join(TEMP_UPLOAD_DIR, pdf_id)
-
-#     with open(pdf_path, "wb") as f:
-#         content = await file.read()
-#         f.write(content)
-
-#     # Extract text & chunk
-#     pages = extract_text_from_pdf(pdf_path)
-#     chunks = chunk_text(pages)
-
-#     # Store embeddings in vector DB
-#     store_embeddings(pdf_id, chunks)
-
-#     return UploadResponse(pdf_id=pdf_id, message="PDF uploaded and processed successfully")
-
-
-# @app.post("/api/demo_backend_v2/pdf_data_extraction/ask_question", response_model=AnswerResponse)
-# async def ask_question(req: QuestionRequestPDF):
-#     if not req.pdf_id:
-#         raise HTTPException(status_code=400, detail="PDF ID is required")
-    
-#     retrieved_chunks = query_embeddings(req.pdf_id, req.question, top_k=3)
-#     if not retrieved_chunks:
-#         return AnswerResponse(answer="No relevant information found.", source_chunks=[])
-
-#     context_texts = [chunk["text"] for chunk in retrieved_chunks]
-
-#     answer = generate_answer(req.question, context_texts)
-
-#     return AnswerResponse(answer=answer, source_chunks=context_texts)
-
-# @app.get("/api/demo_backend_v2/")
-# async def root():
-#     return {"message": "Welcome to the FastAPI application!"}
 
 
 @app.post("/api/demo_backend_v2/ddx")
@@ -836,3 +805,30 @@ def delete_user(face_id: str, db: Session = Depends(get_db)):
     db.commit()
 
     return {"message": f"User and face {face_id} deleted."}
+
+
+
+
+# Handwritten Text converter
+
+@app.post("/api/demo_backend_v2/extract-handwritten-text")
+async def extract_handwritten_text_api(file: UploadFile = File(...)):
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Only image files are accepted.")
+
+    # Save file temporarily
+    file_id = str(uuid.uuid4())
+    temp_path = os.path.join(UPLOAD_FOLDER, f"{file_id}_{file.filename}")
+    with open(temp_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    # Run extraction logic
+    try:
+        extracted_text = extract_handwritten_text(temp_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Clean up the temp file
+        os.remove(temp_path)
+
+    return {"extracted_text": extracted_text}
