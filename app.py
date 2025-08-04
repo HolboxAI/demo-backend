@@ -38,7 +38,7 @@ from virtual_try_on.virtual_try_on import handle_process
 from healthscribe.healthscribe import allowed_file, upload_to_s3, fetch_summary, start_transcription, ask_claude
 
 # # Face detection imports
-# from face_detection.face_detection import process_video_frames
+from face_detection.face_detection import process_video_frames
 # Face recognigation imports
 from face_recognigation.face_recognigation import add_face_to_collection, recognize_face,add_face_and_upload
 from face_recognigation.face_recognigation import get_rekognition_client_accountB, FACE_COLLECTION_ID
@@ -171,29 +171,29 @@ def get_db():
         db.close()
 
 
-# @app.post("/api/demo_backend_v2/detect_faces")
-# async def detect_faces_api(video: UploadFile = File(...)):
-#     """
-#     API endpoint to upload a video, process it for face recognition, and return detection results.
-#     """
-#     if not video.filename:
-#         raise HTTPException(status_code=400, detail="Invalid file name.")
+@app.post("/api/demo_backend_v2/detect_faces")
+async def detect_faces_api(video: UploadFile = File(...)):
+    """
+    API endpoint to upload a video, process it for face recognition, and return detection results.
+    """
+    if not video.filename:
+        raise HTTPException(status_code=400, detail="Invalid file name.")
 
-#     # Save uploaded video to a file
-#     file_path = os.path.join(UPLOAD_FOLDER, video.filename)
-#     with open(file_path, "wb") as f:
-#         f.write(await video.read())
+    # Save uploaded video to a file
+    file_path = os.path.join(UPLOAD_FOLDER, video.filename)
+    with open(file_path, "wb") as f:
+        f.write(await video.read())
 
-#     # Call the face detection function from face_detection module
-#     detected_faces = process_video_frames(file_path)
+    # Call the face detection function from face_detection module
+    detected_faces = process_video_frames(file_path)
 
-#     # Prepare the response
-#     response = {
-#         "video": video.filename,
-#         "detected_faces": detected_faces
-#     }
+    # Prepare the response
+    response = {
+        "video": video.filename,
+        "detected_faces": detected_faces
+    }
 
-#     return JSONResponse(content=response)
+    return JSONResponse(content=response)
 
 
 
