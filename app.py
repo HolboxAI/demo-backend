@@ -38,7 +38,7 @@ from virtual_try_on.virtual_try_on import handle_process
 from healthscribe.healthscribe import allowed_file, upload_to_s3, fetch_summary, start_transcription, ask_claude
 
 # # Face detection imports
-from face_detection.face_detection import process_video_frames
+# from face_detection.face_detection import process_video_frames
 # Face recognigation imports
 from face_recognigation.face_recognigation import add_face_to_collection, recognize_face,add_face_and_upload
 from face_recognigation.face_recognigation import get_rekognition_client_accountB, FACE_COLLECTION_ID
@@ -86,6 +86,9 @@ from voice_agent.voice_agent import voice_websocket_endpoint
 # handwritten
 from handwritten.handwritten import extract_handwritten_text
 
+# Marketplace
+from marketplace.fulfillment import router as marketplace_router
+
 
 # Dependency to get the Authorization token
 def get_authorization_header(request: Request):
@@ -105,8 +108,9 @@ api_router = APIRouter(dependencies=[Depends(get_current_user)])
 
 # Initialize FastAPI app
 # app = FastAPI(dependencies=[Depends(get_authorization_header)]) # All endpoints will require authentication by default
-app = FastAPI()
+app = FastAPI() 
 app.include_router(api_router)
+app.include_router(marketplace_router)
 # organization router
 
 # # Initialize instances of your assistants
@@ -143,14 +147,6 @@ load_dotenv()  # Load environment variables from .env file
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Database setup
-#DATABASE_URL = "postgresql://postgres:demo.holbox.ai@database-1.carkqwcosit4.us-east-1.rds.amazonaws.com:5432/face_detection"
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
 # Dependency to get the Authorization token
 def get_authorization_header(request: Request):
     authorization_header = request.headers.get("Authorization")
@@ -175,29 +171,29 @@ def get_db():
         db.close()
 
 
-@app.post("/api/demo_backend_v2/detect_faces")
-async def detect_faces_api(video: UploadFile = File(...)):
-    """
-    API endpoint to upload a video, process it for face recognition, and return detection results.
-    """
-    if not video.filename:
-        raise HTTPException(status_code=400, detail="Invalid file name.")
+# @app.post("/api/demo_backend_v2/detect_faces")
+# async def detect_faces_api(video: UploadFile = File(...)):
+#     """
+#     API endpoint to upload a video, process it for face recognition, and return detection results.
+#     """
+#     if not video.filename:
+#         raise HTTPException(status_code=400, detail="Invalid file name.")
 
-    # Save uploaded video to a file
-    file_path = os.path.join(UPLOAD_FOLDER, video.filename)
-    with open(file_path, "wb") as f:
-        f.write(await video.read())
+#     # Save uploaded video to a file
+#     file_path = os.path.join(UPLOAD_FOLDER, video.filename)
+#     with open(file_path, "wb") as f:
+#         f.write(await video.read())
 
-    # Call the face detection function from face_detection module
-    detected_faces = process_video_frames(file_path)
+#     # Call the face detection function from face_detection module
+#     detected_faces = process_video_frames(file_path)
 
-    # Prepare the response
-    response = {
-        "video": video.filename,
-        "detected_faces": detected_faces
-    }
+#     # Prepare the response
+#     response = {
+#         "video": video.filename,
+#         "detected_faces": detected_faces
+#     }
 
-    return JSONResponse(content=response)
+#     return JSONResponse(content=response)
 
 
 
