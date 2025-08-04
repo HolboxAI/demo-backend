@@ -14,8 +14,9 @@ import traceback
 import logging
 import base64
 from auth import get_current_user  # Import the authentication dependency
+import shutil
 
-
+from eda.eda import EDAProcessor, EDAProcessorManager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -831,3 +832,59 @@ async def extract_handwritten_text_api(file: UploadFile = File(...)):
         os.remove(temp_path)
 
     return {"extracted_text": extracted_text}
+
+
+# EDA API endpoints
+manager = EDAProcessorManager()
+
+@app.post("/api/demo_backend_v2/create-session")
+async def create_session():
+    session_id = manager.create_session()
+    return {"session_id": session_id}
+
+@app.post("/api/demo_backend_v2/upload-csv")
+async def upload_csv(session_id: str = Form(...), file: UploadFile = File(...)):
+    processor = manager.get_processor(session_id)
+    if not processor:
+        raise HTTPException(status_code=404, detail="Session not found")
+    try:
+        processor.load_data(file.file)
+        return {"message": "CSV loaded successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/demo_backend_v2/ask-query")
+async def ask_query(session_id: str = Form(...), query: str = Form(...)):
+    processor = manager.get_processor(session_id)
+    if not processor:
+        raise HTTPException(status_code=404, detail="Session not found")
+    try:
+        
+        result = processor.ask_query(query)
+        return {"result": result}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/demo_backend_v2/visualize-all")
+async def visualize_all(session_id: str = Form(...)):
+    processor = manager.get_processor(session_id)
+    if not processor:
+        raise HTTPException(status_code=404, detail="Session not found")
+    try:
+        
+        images = processor.visualize_all()
+        return images
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/demo_backend_v2/visualize")
+async def visualize(session_id: str = Form(...), visualization_type: str = Form(...)):
+    processor = manager.get_processor(session_id)
+    if not processor:
+        raise HTTPException(status_code=404, detail="Session not found")
+    try:
+        img = processor.visualize_individual(visualization_type)
+        return img
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
