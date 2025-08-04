@@ -86,6 +86,9 @@ from voice_agent.voice_agent import voice_websocket_endpoint
 # handwritten
 from handwritten.handwritten import extract_handwritten_text
 
+# Marketplace
+from marketplace.fulfillment import router as marketplace_router
+
 
 # Dependency to get the Authorization token
 def get_authorization_header(request: Request):
@@ -105,8 +108,9 @@ api_router = APIRouter(dependencies=[Depends(get_current_user)])
 
 # Initialize FastAPI app
 # app = FastAPI(dependencies=[Depends(get_authorization_header)]) # All endpoints will require authentication by default
-app = FastAPI()
+app = FastAPI() 
 app.include_router(api_router)
+app.include_router(marketplace_router)
 # organization router
 
 # # Initialize instances of your assistants
@@ -142,14 +146,6 @@ load_dotenv()  # Load environment variables from .env file
 
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-# Database setup
-#DATABASE_URL = "postgresql://postgres:demo.holbox.ai@database-1.carkqwcosit4.us-east-1.rds.amazonaws.com:5432/face_detection"
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 
 # Dependency to get the Authorization token
 def get_authorization_header(request: Request):
