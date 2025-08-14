@@ -15,8 +15,13 @@ from fastapi.staticfiles import StaticFiles
 import traceback
 import logging
 import base64
+import json
 from auth import get_current_user  # Import the authentication dependency
 import httpx
+import boto3
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
+from urllib.parse import urlparse
 
 
 logging.basicConfig(
@@ -840,21 +845,40 @@ async def extract_handwritten_text_api(file: UploadFile = File(...)):
 @app.post("/api/demo_backend_v2/agentcore/invoke")
 async def agentcore_invoke(payload: AgentCoreRequest):
     """
-    Proxy to Bedrock AgentCore runtime. Forwards {'prompt': str} and returns AgentCore response.
+    Proxy to Bedrock AgentCore runtime with SigV4 signing.
     """
     try:
+        # Derive region from URL host; service is bedrock-agentcore
+        parsed = urlparse(AGENTCORE_URL)
+        host_parts = parsed.netloc.split(".")
+        region = host_parts[1] if len(host_parts) > 1 else "us-east-1"
+        service = "bedrock-agentcore"
+
+        # Resolve AWS credentials (env vars, ~/.aws, or IAM role)
+        session = boto3.Session()
+        credentials = session.get_credentials()
+        if credentials is None:
+            raise HTTPException(status_code=500, detail="AWS credentials not found")
+        frozen = credentials.get_frozen_credentials()
+
+        # Prepare and sign request
+        body = json.dumps({"prompt": payload.prompt})
+        headers = {"content-type": "application/json", "host": parsed.netloc}
+        aws_request = AWSRequest(method="POST", url=AGENTCORE_URL, data=body, headers=headers)
+        SigV4Auth(frozen, service, region).add_auth(aws_request)
+        signed_headers = dict(aws_request.headers.items())
+
+        # Send signed request
         async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(
-                AGENTCORE_URL,
-                headers={"content-type": "application/json"},
-                json={"prompt": payload.prompt},
-            )
-        # Forward the exact JSON from AgentCore with the same status code
-        return JSONResponse(status_code=resp.status_code, content=resp.json())
-    except httpx.HTTPError as e:
+            resp = await client.post(AGENTCORE_URL, headers=signed_headers, content=body)
+
+        # Return JSON if possible; otherwise raw text
+        try:
+            content = resp.json()
+        except Exception:
+            content = {"raw": resp.text}
+        return JSONResponse(status_code=resp.status_code, content=content)
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(status_code=502, detail=f"AgentCore proxy failed: {str(e)}")
-    except ValueError:
-        # Non-JSON response from AgentCore
-        raise HTTPException(status_code=502, detail="Invalid response from AgentCore")
-    except:
-        raise HTTPException(status_code=500, detail="Internal server error")
