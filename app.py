@@ -848,6 +848,7 @@ async def agentcore_invoke(payload: AgentCoreRequest):
     Proxy to Bedrock AgentCore runtime with SigV4 signing.
     """
     try:
+        from botocore.credentials import Credentials
         # Derive region from URL host; service is bedrock-agentcore
         parsed = urlparse(AGENTCORE_URL)
         host_parts = parsed.netloc.split(".")
@@ -856,9 +857,10 @@ async def agentcore_invoke(payload: AgentCoreRequest):
 
         # Resolve AWS credentials (env vars, ~/.aws, or IAM role)
         session = boto3.Session()
-        credentials = session.get_credentials()
-        if credentials is None:
-            raise HTTPException(status_code=500, detail="AWS credentials not found")
+        AWS_ACCESS_KEY_ID = "AKIA6ODUZ7QLQLM7ZNEN"
+        AWS_SECRET_ACCESS_KEY = "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"
+
+        credentials = Credentials(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
         frozen = credentials.get_frozen_credentials()
 
         # Prepare and sign request
