@@ -1,3 +1,4 @@
+from requests import status_codes
 from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException, Request, WebSocket, status, Query, Form, Depends
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -14,8 +15,13 @@ from fastapi.staticfiles import StaticFiles
 import traceback
 import logging
 import base64
+import json
 from auth import get_current_user  # Import the authentication dependency
-
+import httpx
+import boto3
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
+from urllib.parse import urlparse
 
 
 logging.basicConfig(
@@ -125,6 +131,8 @@ class QuestionRequest(BaseModel):
 class PiiRequest(BaseModel):
     text: str
 
+class AgentCoreRequest(BaseModel):
+    prompt: str
 
 
 # Enable CORS for all origins
@@ -143,6 +151,11 @@ app.mount("/images", StaticFiles(directory=str(IMAGES_DIR)), name="images")
 
 
 load_dotenv()  # Load environment variables from .env file
+
+AGENTCORE_URL = os.getenv(
+    "AGENTCORE_URL",
+    "https://bedrock-agentcore.us-east-1.amazonaws.com/runtimes/arn%3Aaws%3Abedrock-agentcore%3Aus-east-1%3A992382417943%3Aruntime%2Fstrands_agent_file_system-fd9ElvFsMQ/invocations?qualifier=DEFAULT"
+)
 
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -828,3 +841,46 @@ async def extract_handwritten_text_api(file: UploadFile = File(...)):
         os.remove(temp_path)
 
     return {"extracted_text": extracted_text}
+
+@app.post("/api/demo_backend_v2/agentcore/invoke")
+async def agentcore_invoke(payload: AgentCoreRequest):
+    """
+    Proxy to Bedrock AgentCore runtime with SigV4 signing.
+    """
+    try:
+        from botocore.credentials import Credentials
+        # Derive region from URL host; service is bedrock-agentcore
+        parsed = urlparse(AGENTCORE_URL)
+        host_parts = parsed.netloc.split(".")
+        region = host_parts[1] if len(host_parts) > 1 else "us-east-1"
+        service = "bedrock-agentcore"
+
+        # Resolve AWS credentials (env vars, ~/.aws, or IAM role)
+        session = boto3.Session()
+        AWS_ACCESS_KEY_ID = "AKIA6ODUZ7QLQLM7ZNEN"
+        AWS_SECRET_ACCESS_KEY = "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"
+
+        credentials = Credentials(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
+        frozen = credentials.get_frozen_credentials()
+
+        # Prepare and sign request
+        body = json.dumps({"prompt": payload.prompt})
+        headers = {"content-type": "application/json", "host": parsed.netloc}
+        aws_request = AWSRequest(method="POST", url=AGENTCORE_URL, data=body, headers=headers)
+        SigV4Auth(frozen, service, region).add_auth(aws_request)
+        signed_headers = dict(aws_request.headers.items())
+
+        # Send signed request
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(AGENTCORE_URL, headers=signed_headers, content=body)
+
+        # Return JSON if possible; otherwise raw text
+        try:
+            content = resp.json()
+        except Exception:
+            content = {"raw": resp.text}
+        return JSONResponse(status_code=resp.status_code, content=content)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"AgentCore proxy failed: {str(e)}")
