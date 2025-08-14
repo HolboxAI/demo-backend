@@ -36,7 +36,9 @@ jobs:
             pip install --upgrade pip
             pip install -r requirements.txt
             # Kill any existing uvicorn processes (optional safety)
-            pkill -f "uvicorn" || true
+            pm2 delete backend-server || true
             # Run the app with uvicorn
-            nohup uvicorn app:app --host 0.0.0.0 --port 8000 --reload > app.log 2>&1 &
+            pm2 start "uvicorn app:app --host 0.0.0.0 --port 8000 --reload" --name backend-server
+            #For Optional Safety Save the process
+            pm2 save
           EOF
