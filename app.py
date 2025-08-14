@@ -1,3 +1,4 @@
+from requests import status_codes
 from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException, Request, WebSocket, status, Query, Form, Depends
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -15,7 +16,7 @@ import traceback
 import logging
 import base64
 from auth import get_current_user  # Import the authentication dependency
-
+import httpx
 
 
 logging.basicConfig(
@@ -125,6 +126,8 @@ class QuestionRequest(BaseModel):
 class PiiRequest(BaseModel):
     text: str
 
+class AgentCoreRequest(BaseModel):
+    prompt: str
 
 
 # Enable CORS for all origins
@@ -143,6 +146,11 @@ app.mount("/images", StaticFiles(directory=str(IMAGES_DIR)), name="images")
 
 
 load_dotenv()  # Load environment variables from .env file
+
+AGENTCORE_URL = os.getenv(
+    "AGENTCORE_URL",
+    "https://bedrock-agentcore.us-east-1.amazonaws.com/runtimes/arn%3Aaws%3Abedrock-agentcore%3Aus-east-1%3A992382417943%3Aruntime%2Fstrands_agent_file_system-fd9ElvFsMQ/invocations?qualifier=DEFAULT"
+)
 
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -828,3 +836,25 @@ async def extract_handwritten_text_api(file: UploadFile = File(...)):
         os.remove(temp_path)
 
     return {"extracted_text": extracted_text}
+
+@app.post("/api/demo_backend_v2/agentcore/invoke")
+async def agentcore_invoke(payload: AgentCoreRequest):
+    """
+    Proxy to Bedrock AgentCore runtime. Forwards {'prompt': str} and returns AgentCore response.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                AGENTCORE_URL,
+                headers={"content-type": "application/json"},
+                json={"prompt": payload.prompt},
+            )
+        # Forward the exact JSON from AgentCore with the same status code
+        return JSONResponse(status_code=resp.status_code, content=resp.json())
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"AgentCore proxy failed: {str(e)}")
+    except ValueError:
+        # Non-JSON response from AgentCore
+        raise HTTPException(status_code=502, detail="Invalid response from AgentCore")
+    except:
+        raise HTTPException(status_code=500, detail="Internal server error")
