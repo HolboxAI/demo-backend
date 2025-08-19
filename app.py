@@ -30,6 +30,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 from dotenv import load_dotenv
+#calorie_content imports
+from typing import Optional
+
+from calorie_content.calorie_content import analyze_calories_flow
 
 #nl2sql imports
 from nl2sql.nl2sql import ask_nl2sql
@@ -94,6 +98,9 @@ from handwritten.handwritten import extract_handwritten_text
 
 # Marketplace
 from marketplace.fulfillment import router as marketplace_router
+
+
+
 
 
 # Dependency to get the Authorization token
@@ -182,6 +189,17 @@ def get_db():
         yield db
     finally:
         db.close()
+
+#calorie_content database setup
+def _ext_from_mime(mime: str) -> str:
+    mapping = {
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/webp": ".webp",
+        "image/heic": ".heic",
+        "image/heif": ".heif",
+    }
+    return mapping.get((mime or "").lower(), ".bin")        
 
 
 @app.post("/api/demo_backend_v2/detect_faces")
@@ -841,6 +859,30 @@ async def extract_handwritten_text_api(file: UploadFile = File(...)):
         os.remove(temp_path)
 
     return {"extracted_text": extracted_text}
+
+
+
+@app.post("/api/demo_backend_v2/estimate-calories")
+async def estimate_calories(
+    image: UploadFile = File(..., description="Food photo (jpg/png/webp)"),
+    portion_hint: Optional[str] = Form(None, description="Optional text like '1 bowl', '2 slices', etc."),
+):
+    
+    try:
+        # Read the uploaded image
+        img_bytes = await image.read()
+        
+        # Call the calorie estimation function
+        result = analyze_calories_flow(img_bytes, portion_hint)
+
+        # Ensure that fresh results are returned for each new request
+        return result
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Calorie estimation failed: {str(e)}")
+
+
+
 
 @app.post("/api/demo_backend_v2/agentcore/invoke")
 async def agentcore_invoke(payload: AgentCoreRequest):
