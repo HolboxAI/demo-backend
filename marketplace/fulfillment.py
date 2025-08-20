@@ -141,19 +141,20 @@ async def marketplace_health():
         db = SessionLocal()
         db.execute("SELECT 1")
         db.close()
-        
+        db_status = "connected"
+    except Exception as e:
+        db_status = f"unhealthy: {str(e)}"
+
+    try:
         # Test AWS credentials
         marketplace_client = boto3.client("metering.marketplace", region_name=os.getenv("AWS_REGION", "us-east-1"))
-        
-        return {
-            "status": "healthy",
-            "database": "connected",
-            "aws_credentials": "valid",
-            "timestamp": datetime.utcnow().isoformat()
-        }
+        aws_status = "valid"
     except Exception as e:
-        return {
-            "status": "unhealthy",
-            "error": str(e),
-            "timestamp": datetime.utcnow().isoformat()
-        }
+        aws_status = f"unhealthy: {str(e)}"
+
+    return {
+        "status": "healthy",
+        "database": db_status,
+        "aws_credentials": aws_status,
+        "timestamp": datetime.utcnow().isoformat()
+    }
