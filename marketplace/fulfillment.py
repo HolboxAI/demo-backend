@@ -7,6 +7,8 @@ from .models import MarketplaceCustomer, Base
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
+from sqlalchemy import text
+
 
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 USAGE_PLAN_ID = os.getenv("USAGE_PLAN_ID","xd5iuh")
@@ -67,7 +69,7 @@ def provision_api_key_for_customer(customer_identifier: str) -> tuple[str, str]:
 
     return api_key_id, api_key_value
 
-@router.post("/marketplace/fulfillment")
+@router.post("/api/demo_backend_v2/marketplace/fulfillment")
 async def marketplace_fulfillment(request: Request, db: Session = Depends(get_db)):
     """
     Handles AWS Marketplace new customer registration.
@@ -131,7 +133,7 @@ async def marketplace_fulfillment(request: Request, db: Session = Depends(get_db
         "api_key_id": new_customer.api_key_id,
     }
 
-@router.get("/marketplace/health")
+@router.get("/api/demo_backend_v2/marketplace/health")
 async def marketplace_health():
     """
     Health check for marketplace service and database connection
@@ -139,7 +141,7 @@ async def marketplace_health():
     try:
         # Test database connection
         db = SessionLocal()
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
         db.close()
         db_status = "connected"
     except Exception as e:
