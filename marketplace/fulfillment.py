@@ -35,7 +35,7 @@ def get_db():
     finally:
         db.close()
 
-@router.post("/marketplace/fulfillment")
+@router.post("api/demo_backed_v2/marketplace/fulfillment")
 async def marketplace_fulfillment(request: Request, db: Session = Depends(get_db)):
     """
     Handles AWS Marketplace new customer registration.
@@ -75,7 +75,7 @@ async def marketplace_fulfillment(request: Request, db: Session = Depends(get_db
     
     return {"status": "success", "customer_id": new_customer.id}
 
-@router.get("/marketplace/health")
+@router.get("api/demo_backed_v2/marketplace/health")
 async def marketplace_health():
     """
     Health check for marketplace service and database connection
