@@ -74,6 +74,7 @@ async def marketplace_fulfillment(request: Request, db: Session = Depends(get_db
     """
     Handles AWS Marketplace new customer registration.
     """
+    print(request.headers)
     token = request.headers.get("x-amzn-marketplace-token")
     if not token:
         raise HTTPException(status_code=400, detail="Missing x-amzn-marketplace-token")
