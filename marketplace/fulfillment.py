@@ -77,7 +77,7 @@ async def marketplace_fulfillment(request: Request, db: Session = Depends(get_db
 
     form_fields = await request.form()
     token = form_fields.get("x-amzn-marketplace-token")
-    
+
     if not token:
         raise HTTPException(status_code=400, detail="Missing x-amzn-marketplace-token")
 
@@ -101,7 +101,7 @@ async def marketplace_fulfillment(request: Request, db: Session = Depends(get_db
     if existing_customer:
         return {"status": "customer already registered",
                 "customer_id": existing_customer.id,
-                "api_key_id": getattr(existing_customer, "api_key_id", None),
+                "api_key": existing_customer.api_key_value
                 }
 
     new_customer = MarketplaceCustomer(
@@ -131,9 +131,7 @@ async def marketplace_fulfillment(request: Request, db: Session = Depends(get_db
     return {
         "status": "success",
         "customer_id": new_customer.id,
-        "customer_identifier": new_customer.customer_identifier,
-        "product_code": new_customer.product_code,
-        "api_key_id": new_customer.api_key_id,
+        "api_key": new_customer.api_key_value
     }
 
 @router.get("/api/demo_backend_v2/marketplace/health")
