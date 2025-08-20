@@ -74,15 +74,10 @@ async def marketplace_fulfillment(request: Request, db: Session = Depends(get_db
     """
     Handles AWS Marketplace new customer registration.
     """
-    print(f"Request Headers: {request.headers}")
-    
-    # Optionally print the body (be careful, large bodies could make the log messy)
-    body = await request.body()  # This returns the raw body as bytes
-    print(f"Request Body: {body.decode('utf-8')}")  # Assuming UTF-8 encoding
 
-    # Print the request path or any other attribute you're interested in
-    print(f"Request Path: {request.url.path}")
-    token = request.headers.get("x-amzn-marketplace-token")
+    form_fields = await request.form()
+    token = form_fields.get("x-amzn-marketplace-token")
+    
     if not token:
         raise HTTPException(status_code=400, detail="Missing x-amzn-marketplace-token")
 
