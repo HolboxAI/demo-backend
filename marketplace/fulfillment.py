@@ -7,6 +7,8 @@ from .models import MarketplaceCustomer, Base
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
+from sqlalchemy import text
+
 
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 USAGE_PLAN_ID = os.getenv("USAGE_PLAN_ID","xd5iuh")
@@ -72,6 +74,7 @@ async def marketplace_fulfillment(request: Request, db: Session = Depends(get_db
     """
     Handles AWS Marketplace new customer registration.
     """
+    print(request.headers)
     token = request.headers.get("x-amzn-marketplace-token")
     if not token:
         raise HTTPException(status_code=400, detail="Missing x-amzn-marketplace-token")
@@ -139,21 +142,22 @@ async def marketplace_health():
     try:
         # Test database connection
         db = SessionLocal()
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
         db.close()
-        
-        # Test AWS credentials
-        marketplace_client = boto3.client("metering.marketplace", region_name=os.getenv("AWS_REGION", "us-east-1"))
-        
-        return {
-            "status": "healthy",
-            "database": "connected",
-            "aws_credentials": "valid",
-            "timestamp": datetime.utcnow().isoformat()
-        }
+        db_status = "connected"
     except Exception as e:
-        return {
-            "status": "unhealthy",
-            "error": str(e),
-            "timestamp": datetime.utcnow().isoformat()
-        }
+        db_status = f"unhealthy: {str(e)}"
+
+    try:
+        # Test AWS credentials
+        marketplace_client = boto3.client("meteringmarketplace", region_name=os.getenv("AWS_REGION", "us-east-1"))
+        aws_status = "valid"
+    except Exception as e:
+        aws_status = f"unhealthy: {str(e)}"
+
+    return {
+        "status": "healthy",
+        "database": db_status,
+        "aws_credentials": aws_status,
+        "timestamp": datetime.utcnow().isoformat()
+    }
