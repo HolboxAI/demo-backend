@@ -147,7 +147,7 @@ async def marketplace_health():
 
     try:
         # Test AWS credentials
-        marketplace_client = boto3.client("metering.marketplace", region_name=os.getenv("AWS_REGION", "us-east-1"))
+        marketplace_client = boto3.client("meteringmarketplace", region_name=os.getenv("AWS_REGION", "us-east-1"))
         aws_status = "valid"
     except Exception as e:
         aws_status = f"unhealthy: {str(e)}"
