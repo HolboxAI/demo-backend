@@ -67,7 +67,7 @@ def provision_api_key_for_customer(customer_identifier: str) -> tuple[str, str]:
 
     return api_key_id, api_key_value
 
-@router.post("/marketplace/fulfillment")
+@router.post("/api/demo_backend_v2/marketplace/fulfillment")
 async def marketplace_fulfillment(request: Request, db: Session = Depends(get_db)):
     """
     Handles AWS Marketplace new customer registration.
@@ -131,7 +131,7 @@ async def marketplace_fulfillment(request: Request, db: Session = Depends(get_db
         "api_key_id": new_customer.api_key_id,
     }
 
-@router.get("/marketplace/health")
+@router.get("/api/demo_backend_v2/marketplace/health")
 async def marketplace_health():
     """
     Health check for marketplace service and database connection
