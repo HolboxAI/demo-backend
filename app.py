@@ -926,9 +926,9 @@ async def agentcore_invoke(payload: AgentCoreRequest):
         raise HTTPException(status_code=502, detail=f"AgentCore proxy failed: {str(e)}")
 
 @app.post("/api/demo_backend_v2/ai_concierge/ask")
-def handle_ai_concierge(session_id: str = Body(...),question: str = Body(...)):
+def handle_ai_concierge(user_id: str = Body(...),question: str = Body(...)):
     try:
-        answer = ai_concierge(session_id,question)
+        answer = ai_concierge(user_id,question)
         return {"answer": answer}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
