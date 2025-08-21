@@ -202,14 +202,10 @@ def _ext_from_mime(mime: str) -> str:
         "image/heif": ".heif",
     }
     return mapping.get((mime or "").lower(), ".bin")   
-#eda setup
+# #eda setup
 class EDARequest(BaseModel):
-    """
-    Request model for the EDA operation, containing parameters for graph generation
-    and question asking.
-    """
-    graph_type: str
-    column: str = None
+    graph_type: str = None  
+    column: str = None      
     question: str     
 
 
@@ -937,35 +933,37 @@ async def agentcore_invoke(payload: AgentCoreRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"AgentCore proxy failed: {str(e)}")
+
+
+         
+
 @app.post("/api/demo_backend_v2/eda")
 async def perform_eda(
-    graph_type: str = Form(...),
-    column: str = Form(...),
+    graph_type: str = Form(None),
+    column: str = Form(None),
     question: str = Form(...),
     file: UploadFile = File(...)
 ):
     """
-    Endpoint to perform Exploratory Data Analysis (EDA), generate a graph based on the 
-    uploaded CSV file, and provide an answer to the user’s question using the OpenAI GPT-5 model.
+    Endpoint to perform Exploratory Data Analysis (EDA), generate graphs based on the
+    uploaded CSV file, and provide an answer to the user’s question using the OpenAI GPT model.
     """
     try:
-        # Save the uploaded file temporarily
+        # Save uploaded file temporarily
         file_location = f"temp_{file.filename}"
         with open(file_location, "wb") as f:
             f.write(await file.read())
 
-        # Generate graph based on the request
-        graph_base64 = generate_graph(file_location, graph_type, column)
+        # Generate graphs
+        graphs_base64 = generate_graph(file_location, graph_type, column)
 
-        # Get the answer to the user's question using OpenAI GPT-5
+        # Get answer from GPT
         answer = ask_openai(file_location, question)
 
-        # Clean up the temporary file after processing
+        # Clean up
         os.remove(file_location)
 
-        # Return both the graph (in base64 format) and the answer
-        return JSONResponse(content={"graph": graph_base64, "answer": answer})
+        return JSONResponse(content={"graphs": graphs_base64, "answer": answer})
 
     except Exception as e:
-        # Log the exception for debugging and return the error to the client
         raise HTTPException(status_code=500, detail=f"Error processing the request: {str(e)}")

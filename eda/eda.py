@@ -49,67 +49,83 @@ class HealthChat:
             return f"Error invoking model: {e}"
 
 
-def generate_graph(csv_file: str, graph_type: str, column: str = None) -> str:
+def generate_graph(csv_file: str, graph_type: str = None, column: str = None) -> list:
     """
-    Generates a graph based on the graph type specified.
+    Generates graphs based on the graph type specified.
+    If graph_type is None -> generates all types of graphs.
+    If column is None -> generates graphs for all applicable columns.
 
     Args:
         csv_file (str): Path to the CSV file.
-        graph_type (str): Type of the graph ('dist', 'time', 'corr', or 'cat').
+        graph_type (str, optional): Type of the graph ('dist', 'time', 'corr', or 'cat').
         column (str, optional): The column to use for the graph, if applicable.
 
     Returns:
-        str: The base64 encoded graph image.
+        list: A list of base64 encoded graph images.
     """
     df = pd.read_csv(csv_file)
-    fig, ax = plt.subplots()
+    graphs = []
 
-    if graph_type == 'dist':  # Distribution plot
-        if column not in df.columns:
-            raise ValueError(f"Column {column} not found in CSV.")
-        ax.hist(df[column], bins=20, edgecolor='black')
-        ax.set_title(f"Distribution of {column}")
-        ax.set_xlabel(column)
-        ax.set_ylabel('Frequency')
+    def save_plot(fig):
+        image_stream = io.BytesIO()
+        plt.savefig(image_stream, format="png")
+        image_stream.seek(0)
+        img_base64 = base64.b64encode(image_stream.read()).decode("utf-8")
+        plt.close(fig)
+        return img_base64
 
-    elif graph_type == 'time':  # Time series plot
-        if column not in df.columns:
-            raise ValueError(f"Column {column} not found in CSV.")
-        df['Date'] = pd.to_datetime(df['Date'])
-        ax.plot(df['Date'], df[column])
-        ax.set_title(f"Time Series of {column}")
-        ax.set_xlabel('Date')
-        ax.set_ylabel(column)
+    # If no graph_type, generate all types
+    graph_types = [graph_type] if graph_type else ["dist", "time", "corr", "cat"]
 
-    elif graph_type == 'corr':  # Correlation heatmap
-        corr = df.corr()
-        cax = ax.matshow(corr, cmap='coolwarm')
-        fig.colorbar(cax)
-        ax.set_title("Correlation Heatmap")
-        ax.set_xticks(range(len(df.columns)))
-        ax.set_xticklabels(df.columns, rotation=90)
-        ax.set_yticks(range(len(df.columns)))
-        ax.set_yticklabels(df.columns)
+    for gtype in graph_types:
+        if gtype == "dist":  # Distribution plots
+            numeric_cols = [column] if column else df.select_dtypes(include="number").columns
+            for col in numeric_cols:
+                fig, ax = plt.subplots()
+                ax.hist(df[col].dropna(), bins=20, edgecolor="black")
+                ax.set_title(f"Distribution of {col}")
+                ax.set_xlabel(col)
+                ax.set_ylabel("Frequency")
+                graphs.append(save_plot(fig))
 
-    elif graph_type == 'cat':  # Categorical plot
-        if column not in df.columns:
-            raise ValueError(f"Column {column} not found in CSV.")
-        df[column].value_counts().plot(kind='bar', ax=ax)
-        ax.set_title(f"Categorical Distribution of {column}")
-        ax.set_xlabel(column)
-        ax.set_ylabel('Frequency')
+        elif gtype == "time":  # Time series plots
+            if "Date" in df.columns:
+                df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+                numeric_cols = [column] if column else df.select_dtypes(include="number").columns
+                for col in numeric_cols:
+                    fig, ax = plt.subplots()
+                    ax.plot(df["Date"], df[col])
+                    ax.set_title(f"Time Series of {col}")
+                    ax.set_xlabel("Date")
+                    ax.set_ylabel(col)
+                    graphs.append(save_plot(fig))
 
-    else:
-        raise ValueError("Invalid graph type. Choose from 'dist', 'time', 'corr', or 'cat'.")
+        elif gtype == "corr":  # Correlation heatmap
+            corr = df.corr(numeric_only=True)
+            fig, ax = plt.subplots()
+            cax = ax.matshow(corr, cmap="coolwarm")
+            fig.colorbar(cax)
+            ax.set_title("Correlation Heatmap")
+            ax.set_xticks(range(len(corr.columns)))
+            ax.set_xticklabels(corr.columns, rotation=90)
+            ax.set_yticks(range(len(corr.columns)))
+            ax.set_yticklabels(corr.columns)
+            graphs.append(save_plot(fig))
 
-    # Convert the plot to base64
-    image_stream = io.BytesIO()
-    plt.savefig(image_stream, format='png')
-    image_stream.seek(0)
-    img_base64 = base64.b64encode(image_stream.read()).decode('utf-8')
-    plt.close(fig)
+        elif gtype == "cat":  # Categorical plots
+            categorical_cols = [column] if column else df.select_dtypes(exclude="number").columns
+            for col in categorical_cols:
+                fig, ax = plt.subplots()
+                df[col].value_counts().plot(kind="bar", ax=ax)
+                ax.set_title(f"Categorical Distribution of {col}")
+                ax.set_xlabel(col)
+                ax.set_ylabel("Frequency")
+                graphs.append(save_plot(fig))
 
-    return img_base64
+        else:
+            raise ValueError("Invalid graph type. Choose from 'dist', 'time', 'corr', or 'cat'.")
+
+    return graphs
 
 
 def ask_openai(csv_file: str, question: str) -> str:
