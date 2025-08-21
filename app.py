@@ -52,6 +52,8 @@ from face_detection.face_detection import process_video_frames
 # Face recognigation imports
 from face_recognigation.face_recognigation import add_face_to_collection, recognize_face,add_face_and_upload
 from face_recognigation.face_recognigation import get_rekognition_client_accountB, FACE_COLLECTION_ID
+#eda imports
+from eda.eda import generate_graph, ask_openai
 # In your app.py (or where you're using the models)
 from face_recognigation._component.model import SessionLocal, UserMetadata
 from face_recognigation.face_recognigation import delete_face_by_photo
@@ -199,7 +201,16 @@ def _ext_from_mime(mime: str) -> str:
         "image/heic": ".heic",
         "image/heif": ".heif",
     }
-    return mapping.get((mime or "").lower(), ".bin")        
+    return mapping.get((mime or "").lower(), ".bin")   
+#eda setup
+class EDARequest(BaseModel):
+    """
+    Request model for the EDA operation, containing parameters for graph generation
+    and question asking.
+    """
+    graph_type: str
+    column: str = None
+    question: str     
 
 
 @app.post("/api/demo_backend_v2/detect_faces")
@@ -926,3 +937,35 @@ async def agentcore_invoke(payload: AgentCoreRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"AgentCore proxy failed: {str(e)}")
+@app.post("/api/demo_backend_v2/eda")
+async def perform_eda(
+    graph_type: str = Form(...),
+    column: str = Form(...),
+    question: str = Form(...),
+    file: UploadFile = File(...)
+):
+    """
+    Endpoint to perform Exploratory Data Analysis (EDA), generate a graph based on the 
+    uploaded CSV file, and provide an answer to the user’s question using the OpenAI GPT-5 model.
+    """
+    try:
+        # Save the uploaded file temporarily
+        file_location = f"temp_{file.filename}"
+        with open(file_location, "wb") as f:
+            f.write(await file.read())
+
+        # Generate graph based on the request
+        graph_base64 = generate_graph(file_location, graph_type, column)
+
+        # Get the answer to the user's question using OpenAI GPT-5
+        answer = ask_openai(file_location, question)
+
+        # Clean up the temporary file after processing
+        os.remove(file_location)
+
+        # Return both the graph (in base64 format) and the answer
+        return JSONResponse(content={"graph": graph_base64, "answer": answer})
+
+    except Exception as e:
+        # Log the exception for debugging and return the error to the client
+        raise HTTPException(status_code=500, detail=f"Error processing the request: {str(e)}")
