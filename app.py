@@ -52,6 +52,8 @@ from face_detection.face_detection import process_video_frames
 # Face recognigation imports
 from face_recognigation.face_recognigation import add_face_to_collection, recognize_face,add_face_and_upload
 from face_recognigation.face_recognigation import get_rekognition_client_accountB, FACE_COLLECTION_ID
+#eda imports
+from eda.eda import generate_graph, ask_openai 
 # In your app.py (or where you're using the models)
 from face_recognigation._component.model import SessionLocal, UserMetadata
 from face_recognigation.face_recognigation import delete_face_by_photo
@@ -197,7 +199,7 @@ def _ext_from_mime(mime: str) -> str:
         "image/heic": ".heic",
         "image/heif": ".heif",
     }
-    return mapping.get((mime or "").lower(), ".bin")        
+    return mapping.get((mime or "").lower(), ".bin")       
 
 
 @app.post("/api/demo_backend_v2/detect_faces")
@@ -924,6 +926,121 @@ async def agentcore_invoke(payload: AgentCoreRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"AgentCore proxy failed: {str(e)}")
+
+
+
+#eda setup
+
+
+
+class QARequest(BaseModel):
+    question: str
+
+
+# 1️⃣ Question Answering Route
+@app.post("/api/demo_backend_v2/qa")
+async def question_answering(
+    question: str = Form(...),
+    file: UploadFile = File(...)
+):
+    try:
+        file_location = f"temp_{file.filename}"
+        with open(file_location, "wb") as f:
+            f.write(await file.read())
+
+        answer = ask_openai(file_location, question)
+
+        os.remove(file_location)
+        return JSONResponse(content={"answer": answer})
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error in QA: {str(e)}")
+
+
+# 2️⃣ Distribution Graph Route
+@app.post("/api/demo_backend_v2/distribution")
+async def distribution_graph(
+    column: str = Form(...),
+    file: UploadFile = File(...)
+):
+    try:
+        file_location = f"temp_{file.filename}"
+        with open(file_location, "wb") as f:
+            f.write(await file.read())
+
+        graphs = generate_graph(file_location, graph_type="dist", column=column)
+
+        os.remove(file_location)
+        return JSONResponse(content={"graphs": graphs})
+
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error in distribution graph: {str(e)}")
+
+
+# 3️⃣ Time Series Graph Route
+@app.post("/api/demo_backend_v2/time")
+async def time_series_graph(
+    column: str = Form(...),
+    file: UploadFile = File(...)
+):
+    try:
+        file_location = f"temp_{file.filename}"
+        with open(file_location, "wb") as f:
+            f.write(await file.read())
+
+        graphs = generate_graph(file_location, graph_type="time", column=column)
+
+        os.remove(file_location)
+        return JSONResponse(content={"graphs": graphs})
+
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error in time series graph: {str(e)}")
+
+
+# 4️⃣ Correlation Heatmap Route
+@app.post("/api/demo_backend_v2/correlation")
+async def correlation_graph(
+    file: UploadFile = File(...)
+):
+    try:
+        file_location = f"temp_{file.filename}"
+        with open(file_location, "wb") as f:
+            f.write(await file.read())
+
+        graphs = generate_graph(file_location, graph_type="corr")
+
+        os.remove(file_location)
+        return JSONResponse(content={"graphs": graphs})
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error in correlation heatmap: {str(e)}")
+
+
+# 5️⃣ Categorical Graph Route
+@app.post("/api/demo_backend_v2/categorical")
+async def categorical_graph(
+    column: str = Form(...),
+    file: UploadFile = File(...)
+):
+    try:
+        file_location = f"temp_{file.filename}"
+        with open(file_location, "wb") as f:
+            f.write(await file.read())
+
+        graphs = generate_graph(file_location, graph_type="cat", column=column)
+
+        os.remove(file_location)
+        return JSONResponse(content={"graphs": graphs})
+
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error in categorical graph: {str(e)}")
+
 
 @app.post("/api/demo_backend_v2/ai_concierge/ask")
 def handle_ai_concierge(user_id: str = Body(...),question: str = Body(...)):
