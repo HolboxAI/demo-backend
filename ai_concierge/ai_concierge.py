@@ -5,12 +5,13 @@ from bedrock_agentcore.memory import MemoryClient
 from strands import Agent
 from strands.hooks import AgentInitializedEvent, HookProvider, HookRegistry, MessageAddedEvent
 
-REGION = 'us-west-1'
+REGION = 'us-east-1'
 MEMORY_NAME = "AIConciergeMemory"
 ACTOR_ID = "concierge_user"
 
 client = MemoryClient(region_name=REGION)
 
+MEMORY_ID = None
 try:
     memory = client.create_memory_and_wait(
         name=MEMORY_NAME,
@@ -23,17 +24,22 @@ try:
 except ClientError as e:
     if 'already exists' in str(e):
         memories = client.list_memories()
-        MEMORY_ID = next((m['id'] for m in memories if m['name'] == MEMORY_NAME), None)
-        print(f"Using existing memory: {MEMORY_ID}")
+        MEMORY_ID = next((m['id'] for m in memories if m['id'].startswith(MEMORY_NAME)), None)
+        if MEMORY_ID:
+            print(f"Using existing memory: {MEMORY_ID}")
+        else:
+            raise ValueError(f"Memory with name {MEMORY_NAME} not found in existing memories")
     else:
         raise e
+if not MEMORY_ID:
+    raise ValueError("Failed to initialize memory ID")
 
 class MemoryHookProvider(HookProvider):
-    def __init__(self, memory_client: MemoryClient, memory_id: str, actor_id: str, user_id: str):
+    def __init__(self, memory_client: MemoryClient, memory_id: str, actor_id: str, session_id: str):
         self.memory_client = memory_client
         self.memory_id = memory_id
         self.actor_id = actor_id
-        self.user_id = user_id
+        self.session_id = session_id
     
     def on_agent_initialized(self, event: AgentInitializedEvent):
         """Load recent conversation history when agent starts"""
@@ -41,7 +47,7 @@ class MemoryHookProvider(HookProvider):
             recent_turns = self.memory_client.get_last_k_turns(
                 memory_id=self.memory_id,
                 actor_id=self.actor_id,
-                user_id=self.user_id,
+                session_id=self.session_id,
                 k=10
             )
             
@@ -79,7 +85,7 @@ class MemoryHookProvider(HookProvider):
         registry.add_callback(MessageAddedEvent, self.on_message_added)
         registry.add_callback(AgentInitializedEvent, self.on_agent_initialized)
 
-def ai_concierge(user_id: str, question: str):
+def ai_concierge(session_id: str, question: str):
     system_prompt = """
     You are an AI concierge specializing in providing business-related information. Your role is to answer questions directly related to businesses, including but not limited to:
     Operating hours, Locations and addresses, Products or services offered, Customer reviews and ratings, Contact details (e.g., phone numbers, emails), Business policies (returns, shipping, etc.)
@@ -93,7 +99,7 @@ def ai_concierge(user_id: str, question: str):
     agent = Agent(
         name="AIConcierge",
         system_prompt=system_prompt,
-        hooks=[MemoryHookProvider(client, MEMORY_ID, ACTOR_ID, user_id)],
+        hooks=[MemoryHookProvider(client, MEMORY_ID, ACTOR_ID, session_id)],
     )
     try:
         result = agent(question)
