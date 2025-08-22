@@ -16,6 +16,6 @@ This module provides an AI-powered concierge tool that answers user questions ab
 **Request (POST /ai_concierge/ask):**
 ```json
 {
-    "session_id": "user_session_123",
+    "session_id": "test",
     "question": "What are the opening hours of a typical Starbucks location?"
 }
