@@ -26,4 +26,5 @@ psycopg2
 python-jose
 pymysql
 matplotlib
-
+bedrock-agentcore
+strands-agents
