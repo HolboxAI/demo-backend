@@ -134,7 +134,7 @@ async def marketplace_fulfillment(request: Request, db: Session = Depends(get_db
         "api_key": new_customer.api_key_value
     }
 
-@router.get("/api/demo_backend_v2/marketplace/health")
+@router.get("api/demo_backed_v2/marketplace/health")
 async def marketplace_health():
     """
     Health check for marketplace service and database connection
