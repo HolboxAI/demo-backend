@@ -25,3 +25,5 @@ pillow
 psycopg2
 python-jose
 pymysql
+bedrock-agentcore
+strands-agents

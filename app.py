@@ -1,5 +1,5 @@
 from requests import status_codes
-from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException, Request, WebSocket, status, Query, Form, Depends
+from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException, Request, WebSocket, status, Query, Form, Depends, Body
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -99,9 +99,7 @@ from handwritten.handwritten import extract_handwritten_text
 # Marketplace
 from marketplace.fulfillment import router as marketplace_router
 
-
-
-
+from ai_concierge.ai_concierge import ai_concierge
 
 # Dependency to get the Authorization token
 def get_authorization_header(request: Request):
@@ -926,3 +924,11 @@ async def agentcore_invoke(payload: AgentCoreRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"AgentCore proxy failed: {str(e)}")
+
+@app.post("/api/demo_backend_v2/ai_concierge/ask")
+def handle_ai_concierge(user_id: str = Body(...),question: str = Body(...)):
+    try:
+        answer = ai_concierge(user_id,question)
+        return {"answer": answer}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
