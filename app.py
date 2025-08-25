@@ -53,7 +53,12 @@ from face_detection.face_detection import process_video_frames
 from face_recognigation.face_recognigation import add_face_to_collection, recognize_face,add_face_and_upload
 from face_recognigation.face_recognigation import get_rekognition_client_accountB, FACE_COLLECTION_ID
 #eda imports
-from eda.eda import generate_graph, ask_openai 
+from eda.eda import (
+    generate_graph_from_session, 
+    ask_openai_from_session, 
+    get_csv_info,
+    file_manager
+) 
 # In your app.py (or where you're using the models)
 from face_recognigation._component.model import SessionLocal, UserMetadata
 from face_recognigation.face_recognigation import delete_face_by_photo
@@ -366,6 +371,7 @@ async def recognize_face_api(image: UploadFile = File(...)):
 async def startup_event():
     # asyncio.create_task(cleanup_task())
     asyncio.create_task(cleanup_task_summ())
+    asyncio.create_task(cleanup_eda_sessions())
 
 
 @app.post("/api/demo_backend_v2/summarizer/upload_pdf", response_model=UploadResponse)
@@ -928,120 +934,6 @@ async def agentcore_invoke(payload: AgentCoreRequest):
         raise HTTPException(status_code=502, detail=f"AgentCore proxy failed: {str(e)}")
 
 
-
-#eda setup
-
-
-
-class QARequest(BaseModel):
-    question: str
-
-
-# 1️⃣ Question Answering Route
-@app.post("/api/demo_backend_v2/qa")
-async def question_answering(
-    question: str = Form(...),
-    file: UploadFile = File(...)
-):
-    try:
-        file_location = f"temp_{file.filename}"
-        with open(file_location, "wb") as f:
-            f.write(await file.read())
-
-        answer = ask_openai(file_location, question)
-
-        os.remove(file_location)
-        return JSONResponse(content={"answer": answer})
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error in QA: {str(e)}")
-
-
-# 2️⃣ Distribution Graph Route
-@app.post("/api/demo_backend_v2/distribution")
-async def distribution_graph(
-    column: str = Form(...),
-    file: UploadFile = File(...)
-):
-    try:
-        file_location = f"temp_{file.filename}"
-        with open(file_location, "wb") as f:
-            f.write(await file.read())
-
-        graphs = generate_graph(file_location, graph_type="dist", column=column)
-
-        os.remove(file_location)
-        return JSONResponse(content={"graphs": graphs})
-
-    except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error in distribution graph: {str(e)}")
-
-
-# 3️⃣ Time Series Graph Route
-@app.post("/api/demo_backend_v2/time")
-async def time_series_graph(
-    column: str = Form(...),
-    file: UploadFile = File(...)
-):
-    try:
-        file_location = f"temp_{file.filename}"
-        with open(file_location, "wb") as f:
-            f.write(await file.read())
-
-        graphs = generate_graph(file_location, graph_type="time", column=column)
-
-        os.remove(file_location)
-        return JSONResponse(content={"graphs": graphs})
-
-    except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error in time series graph: {str(e)}")
-
-
-# 4️⃣ Correlation Heatmap Route
-@app.post("/api/demo_backend_v2/correlation")
-async def correlation_graph(
-    file: UploadFile = File(...)
-):
-    try:
-        file_location = f"temp_{file.filename}"
-        with open(file_location, "wb") as f:
-            f.write(await file.read())
-
-        graphs = generate_graph(file_location, graph_type="corr")
-
-        os.remove(file_location)
-        return JSONResponse(content={"graphs": graphs})
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error in correlation heatmap: {str(e)}")
-
-
-# 5️⃣ Categorical Graph Route
-@app.post("/api/demo_backend_v2/categorical")
-async def categorical_graph(
-    column: str = Form(...),
-    file: UploadFile = File(...)
-):
-    try:
-        file_location = f"temp_{file.filename}"
-        with open(file_location, "wb") as f:
-            f.write(await file.read())
-
-        graphs = generate_graph(file_location, graph_type="cat", column=column)
-
-        os.remove(file_location)
-        return JSONResponse(content={"graphs": graphs})
-
-    except ValueError as ve:
-        raise HTTPException(status_code=400, detail=str(ve))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error in categorical graph: {str(e)}")
-
-
 @app.post("/api/demo_backend_v2/ai_concierge/ask")
 def handle_ai_concierge(user_id: str = Body(...),question: str = Body(...)):
     try:
@@ -1049,3 +941,111 @@ def handle_ai_concierge(user_id: str = Body(...),question: str = Body(...)):
         return {"answer": answer}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+
+
+#eda setup
+
+# Background task for cleaning up expired EDA sessions
+async def cleanup_eda_sessions():
+    """Background task to clean up expired EDA sessions every 5 minutes"""
+    while True:
+        try:
+            file_manager.cleanup_expired_sessions()
+            await asyncio.sleep(300)  # Run every 5 minutes
+        except Exception as e:
+            logger.error(f"Error cleaning up EDA sessions: {e}")
+            await asyncio.sleep(300)
+
+# All endpoints use Form parameters directly
+
+# 0️⃣ Upload CSV and Create Session Route
+@app.post("/api/demo_backend_v2/eda/upload")
+async def upload_csv_session(file: UploadFile = File(...)):
+    """Upload CSV file and create a session for EDA operations"""
+    try:
+        if not file.filename.lower().endswith('.csv'):
+            raise HTTPException(status_code=400, detail="Only CSV files are allowed")
+        
+        # Read file content
+        file_content = await file.read()
+        
+        # Create session
+        session_id = file_manager.create_session(file_content, file.filename)
+        
+        # Get CSV info for the response
+        csv_info = get_csv_info(session_id)
+        
+        return JSONResponse(content={
+            "session_id": session_id,
+            "message": "CSV uploaded successfully. Session created.",
+            "csv_info": csv_info
+        })
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error uploading CSV: {str(e)}")
+
+# 1️⃣ Question Answering Route
+@app.post("/api/demo_backend_v2/eda/qa")
+async def question_answering(
+    session_id: str = Form(...),
+    question: str = Form(...)
+):
+    try:
+        answer = ask_openai_from_session(session_id, question)
+        return JSONResponse(content={"answer": answer})
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error in QA: {str(e)}")
+
+# 2️⃣ Distribution Graph Route
+@app.post("/api/demo_backend_v2/eda/distribution")
+async def distribution_graph(
+    session_id: str = Form(...),
+    column: str = Form(...)
+):
+    try:
+        graphs = generate_graph_from_session(session_id, graph_type="dist", column=column)
+        return JSONResponse(content={"graphs": graphs})
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error in distribution graph: {str(e)}")
+
+# 3️⃣ Time Series Graph Route
+@app.post("/api/demo_backend_v2/eda/time")
+async def time_series_graph(
+    session_id: str = Form(...),
+    column: str = Form(...)
+):
+    try:
+        graphs = generate_graph_from_session(session_id, graph_type="time", column=column)
+        return JSONResponse(content={"graphs": graphs})
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error in time series graph: {str(e)}")
+
+# 4️⃣ Correlation Heatmap Route
+@app.post("/api/demo_backend_v2/eda/correlation")
+async def correlation_graph(session_id: str = Form(...)):
+    try:
+        graphs = generate_graph_from_session(session_id, graph_type="corr")
+        return JSONResponse(content={"graphs": graphs})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error in correlation heatmap: {str(e)}")
+
+# 5️⃣ Categorical Graph Route
+@app.post("/api/demo_backend_v2/eda/categorical")
+async def categorical_graph(
+    session_id: str = Form(...),
+    column: str = Form(...)
+):
+    try:
+        graphs = generate_graph_from_session(session_id, graph_type="cat", column=column)
+        return JSONResponse(content={"graphs": graphs})
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error in categorical graph: {str(e)}")
