@@ -76,7 +76,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from ddx.ddx import DDxAssistant
 from pii_redactor.redactor import PiiRedactor
 from pii_extractor.extractor import PiiExtractor
-
+from medical_claim_verifier.medical_claim_verifier import MedicalClaimVerifierAssistant
  #Text to Image imports
 from txt2img.main import ImageGenerationRequest, ImageGenerationResponse, generate_image
 
@@ -1049,3 +1049,34 @@ async def categorical_graph(
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error in categorical graph: {str(e)}")
+
+
+#medical claim verifier setup
+
+
+medical_claim_verifier = MedicalClaimVerifierAssistant()
+
+@app.post("/verify-medical-claim")
+async def verify_medical_claim(
+    file: UploadFile = File(...),
+    insurance_provider: str = Form(None)
+):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Invalid file name.")
+
+    file_path = os.path.join(UPLOAD_FOLDER, file.filename)
+    with open(file_path, "wb") as f:
+        f.write(await file.read())
+
+    try:
+        result = medical_claim_verifier.verify_claim_from_document(file_path, insurance_provider)
+        
+        return {
+            "message": "Medical claim verification completed successfully",
+            "result": result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Medical claim verification failed: {str(e)}")
+    finally:
+        if os.path.exists(file_path):
+            os.remove(file_path)
