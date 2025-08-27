@@ -146,7 +146,7 @@ def ask_claude(question, summary):
 
    try:
        response = brt.converse(
-           modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",  # ✅ Use the model you have access to
+           modelId="arn:aws:bedrock:us-east-1:992382417943:inference-profile/us.anthropic.claude-3-7-sonnet-20250219-v1:0",  # ✅ Use the model you have access to
            messages=conversation,
            inferenceConfig={
                "maxTokens": 512,
