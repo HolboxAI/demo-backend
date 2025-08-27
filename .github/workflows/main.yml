@@ -1,44 +1,70 @@
-name: Deploy demo holbox BE to EC2
+# name: Deploy demo holbox BE to EC2
+# on:
+#   push:
+#     branches: [main]
+# jobs:
+#   deploy:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v3
+#       - name: Setup SSH
+#         run: |
+#           mkdir -p ~/.ssh
+#           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+#           chmod 600 ~/.ssh/id_rsa
+#           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+#       - name: Deploy to EC2
+#         run: |
+#           ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << EOF
+#             set -e
+#             REPO_DIR="demo-backend"
+#             if [ -d "\$REPO_DIR/.git" ]; then
+#               echo "Repo exists, pulling latest changes..."
+#               cd \$REPO_DIR
+#               git reset --hard
+#               git clean -fd
+#               git pull origin main
+#             else
+#               echo "Cloning repo..."
+#               git clone git@github.com:HolboxAI/demo-backend.git
+#               cd \$REPO_DIR
+#             fi
+#             # Set up and activate virtual environment
+#             python3 -m venv venv
+#             source venv/bin/activate
+#             pip install --upgrade pip
+#             pip install -r requirements.txt
+#             # Kill any existing uvicorn processes (optional safety)
+#             pm2 delete backend-server || true
+#             # Run the app with uvicorn
+#             pm2 start "uvicorn app:app --host 0.0.0.0 --port 8000 --reload" --name backend-server
+#             #For Optional Safety Save the process
+#             pm2 save
+#           EOF
+
+name: Build and Upload Backend to S3
+
 on:
   push:
     branches: [main]
+
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
-      - name: Deploy to EC2
-        run: |
-          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << EOF
-            set -e
-            REPO_DIR="demo-backend"
-            if [ -d "\$REPO_DIR/.git" ]; then
-              echo "Repo exists, pulling latest changes..."
-              cd \$REPO_DIR
-              git reset --hard
-              git clean -fd
-              git pull origin main
-            else
-              echo "Cloning repo..."
-              git clone git@github.com:HolboxAI/demo-backend.git
-              cd \$REPO_DIR
-            fi
-            # Set up and activate virtual environment
-            python3 -m venv venv
-            source venv/bin/activate
-            pip install --upgrade pip
-            pip install -r requirements.txt
-            # Kill any existing uvicorn processes (optional safety)
-            pm2 delete backend-server || true
-            # Run the app with uvicorn
-            pm2 start "uvicorn app:app --host 0.0.0.0 --port 8000 --reload" --name backend-server
-            #For Optional Safety Save the process
-            pm2 save
-          EOF
+        uses: actions/checkout@v4
+
+      - name: Zip the repository
+        run: zip -r backend.zip . -x ".git/*"
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Upload to S3
+        run: aws s3 cp backend.zip s3://${{ secrets.S3_BUCKET }}/backend.zip
