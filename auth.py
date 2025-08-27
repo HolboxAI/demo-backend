@@ -1,4 +1,4 @@
-ximport os
+import os
 import requests
 from fastapi import HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
