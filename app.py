@@ -360,6 +360,9 @@ async def recognize_face_api(image: UploadFile = File(...)):
 
 
 
+@app.get("/")
+def demo_backend_v2():
+    return {"status": "ok", "message": "Demo backend v2 is running!"}
 
 
 @app.on_event("startup")
