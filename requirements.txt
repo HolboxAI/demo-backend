@@ -22,9 +22,10 @@ asyncio
 Werkzeug
 sqlalchemy
 pillow
-psycopg2
+# psycopg2
 python-jose
 pymysql
 matplotlib
 bedrock-agentcore
 strands-agents
+google-generativeai

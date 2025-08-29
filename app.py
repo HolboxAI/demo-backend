@@ -103,6 +103,8 @@ from marketplace.fulfillment import router as marketplace_router
 
 from ai_concierge.ai_concierge import ai_concierge
 
+from image_editing.nanobanana import edit_image, EditImageRequest, EditImageResponse
+
 # Dependency to get the Authorization token
 def get_authorization_header(request: Request):
     authorization_header = request.headers.get("Authorization")
@@ -1052,3 +1054,8 @@ def handle_ai_concierge(user_id: str = Body(...),question: str = Body(...)):
         return {"answer": answer}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/demo_backend_v2/image_editing/edit", response_model=EditImageResponse)
+def handle_edit_image(request: EditImageRequest = Body(...)):
+    result = edit_image(request.image_data, request.prompt)
+    return result
