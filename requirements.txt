@@ -28,4 +28,4 @@ pymysql
 matplotlib
 bedrock-agentcore
 strands-agents
-google-generativeai
+google-cloud-aiplatform
