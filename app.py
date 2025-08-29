@@ -1,7 +1,7 @@
 from requests import status_codes
 from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException, Request, WebSocket, status, Query, Form, Depends, Body
 from fastapi import APIRouter
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import uuid
@@ -102,6 +102,8 @@ from handwritten.handwritten import extract_handwritten_text
 from marketplace.fulfillment import router as marketplace_router
 
 from ai_concierge.ai_concierge import ai_concierge
+
+from image_editing.nanobanana import edit_image, EditImageResponse
 
 # Dependency to get the Authorization token
 def get_authorization_header(request: Request):
@@ -1052,3 +1054,21 @@ def handle_ai_concierge(user_id: str = Body(...),question: str = Body(...)):
         return {"answer": answer}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/demo_backend_v2/image_editing/edit", response_model=EditImageResponse)
+async def handle_edit_image(image: UploadFile = File(...), prompt: str = Form(...)):
+    """
+    Endpoint to handle image editing requests.
+    Accepts an image file and a prompt and returns the edited image in Base64 format.
+    """
+    from io import BytesIO
+    try:
+        image_bytes = await image.read()
+        result = edit_image(image_bytes, prompt)
+        if result.error:
+            return result
+        img_data = base64.b64decode(result.edited_image)
+        img_stream = BytesIO(img_data)
+        return StreamingResponse(img_stream, media_type="image/png")
+    except Exception as e:
+        return EditImageResponse(error=f"Error processing the image: {e}")
