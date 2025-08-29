@@ -77,6 +77,8 @@ from ddx.ddx import DDxAssistant
 from pii_redactor.redactor import PiiRedactor
 from pii_extractor.extractor import PiiExtractor
 from medical_claim_verifier.medical_claim_verifier import MedicalClaimVerifierAssistant
+from medical_coding.medical_coding import MedicalCodingAssistant
+
  #Text to Image imports
 from txt2img.main import ImageGenerationRequest, ImageGenerationResponse, generate_image
 
@@ -1056,7 +1058,7 @@ async def categorical_graph(
 
 medical_claim_verifier = MedicalClaimVerifierAssistant()
 
-@app.post("/verify-medical-claim")
+@app.post("/api/demo_backend_v2/verify-medical-claim")
 async def verify_medical_claim(
     file: UploadFile = File(...),
     insurance_provider: str = Form(None)
@@ -1079,4 +1081,28 @@ async def verify_medical_claim(
         raise HTTPException(status_code=500, detail=f"Medical claim verification failed: {str(e)}")
     finally:
         if os.path.exists(file_path):
+            os.remove(file_path)
+
+
+#medical coding setup
+medical_coding_assistant = MedicalCodingAssistant()
+@app.post("/api/demo_backend_v2/extract-medical-coding")
+async def extract_medical_coding(file: UploadFile = File(...)):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="File must be provided.")
+
+    file_path = os.path.join(UPLOAD_FOLDER, file.filename)
+    with open(file_path, "wb") as f:
+        f.write(await file.read())
+
+    try:
+        result = medical_coding_assistant.extract_codes(file_path=file_path)
+        return {
+            "message": "Medical coding extraction completed successfully",
+            "result": result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Medical coding extraction failed: {str(e)}")
+    finally:
+        if file_path and os.path.exists(file_path):
             os.remove(file_path)
